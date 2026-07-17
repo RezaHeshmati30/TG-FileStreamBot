@@ -20,11 +20,20 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v6
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8
+
       - name: Sync repository to Hugging Face
-        uses: huggingface/hub-sync@v0.1.0
-        with:
-          github_repo_id: ${{ github.repository }}
-          huggingface_repo_id: ${{ vars.HF_SPACE_ID }}
-          hf_token: ${{ secrets.HF_TOKEN }}
-          repo_type: space
-          space_sdk: docker
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE_ID: ${{ vars.HF_SPACE_ID }}
+        run: >-
+          uvx --from huggingface_hub hf upload
+          "$HF_SPACE_ID"
+          .
+          .
+          --repo-type space
+          --exclude ".git*"
+          --exclude ".github*"
+          --delete "*"
+          --commit-message "Sync from GitHub"
