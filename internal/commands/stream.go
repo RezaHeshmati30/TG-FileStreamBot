@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	_ "time/tzdata"
 
 	"EverythingSuckz/fsb/config"
 	"EverythingSuckz/fsb/internal/utils"
@@ -39,6 +40,33 @@ func supportedMediaFilter(m *types.Message) (bool, error) {
 	default:
 		return false, nil
 	}
+}
+
+func formatFileSize(size int64) string {
+	if size <= 0 {
+		return "Unknown"
+	}
+
+	units := []string{"B", "KB", "MB", "GB", "TB"}
+	value := float64(size)
+	unit := 0
+	for value >= 1024 && unit < len(units)-1 {
+		value /= 1024
+		unit++
+	}
+
+	if unit == 0 {
+		return fmt.Sprintf("%d %s", size, units[unit])
+	}
+	return fmt.Sprintf("%.2f %s", value, units[unit])
+}
+
+func displayLocation() *time.Location {
+	location, err := time.LoadLocation(config.ValueOf.Timezone)
+	if err != nil {
+		return time.UTC
+	}
+	return location
 }
 
 func sendLink(ctx *ext.Context, u *ext.Update) error {
@@ -93,6 +121,9 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 	}
 	createdAt := time.Now().UTC()
 	expiresAt := createdAt.Add(7 * 24 * time.Hour).Unix()
+	location := displayLocation()
+	createdAtDisplay := createdAt.In(location)
+	expiresAtDisplay := time.Unix(expiresAt, 0).In(location)
 	fullHash := utils.PackFile(
 		file.FileName,
 		file.FileSize,
@@ -103,11 +134,23 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 	hash := utils.GetShortHash(fullHash)
 	link := fmt.Sprintf("%s/stream/%d?hash=%s&expires=%d", config.ValueOf.Host, messageID, hash, expiresAt)
 	text := []styling.StyledTextOption{
-		styling.Plain("✅ Your link is ready!\n\n🔗 Direct Link (Tap to copy):\n"),
+		styling.Plain("✅ Your link is ready!\n\n🔗 "),
+		styling.Bold("Direct Link"),
+		styling.Plain(" (Tap to copy)\n"),
 		styling.Code(link),
-		styling.Plain("\n\n📄 File name:\n"),
+		styling.Plain("\n\n📄 "),
+		styling.Bold("File Name"),
+		styling.Plain("\n"),
 		styling.Plain(file.FileName),
-		styling.Plain(fmt.Sprintf("\n\n🕒 Created: %s UTC\n⏳ Valid for 7 days", createdAt.Format("02 Jan 2006, 15:04"))),
+		styling.Plain("\n\n📦 "),
+		styling.Bold("File Size"),
+		styling.Plain(fmt.Sprintf("\n%s", formatFileSize(file.FileSize))),
+		styling.Plain("\n\n🕒 "),
+		styling.Bold("Created"),
+		styling.Plain(fmt.Sprintf("\n%s", createdAtDisplay.Format("02 Jan 2006, 15:04 MST"))),
+		styling.Plain("\n\n⏳ "),
+		styling.Bold("Expires"),
+		styling.Plain(fmt.Sprintf("\n%s (7 days)", expiresAtDisplay.Format("02 Jan 2006, 15:04 MST"))),
 	}
 	row := tg.KeyboardButtonRow{
 		Buttons: []tg.KeyboardButtonClass{

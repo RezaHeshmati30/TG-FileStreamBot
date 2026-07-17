@@ -50,6 +50,7 @@ type config struct {
 	UserSession    string       `envconfig:"USER_SESSION"`
 	UsePublicIP    bool         `envconfig:"USE_PUBLIC_IP" default:"false"`
 	AllowedUsers   allowedUsers `envconfig:"ALLOWED_USERS"`
+	Timezone       string       `envconfig:"TIMEZONE" default:"Europe/Berlin"`
 	MultiTokens    []string
 
 	// stream specific config

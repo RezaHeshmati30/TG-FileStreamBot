@@ -29,6 +29,11 @@
             "description": "A Fully Qualified Domain Name or Heroku App URL. (eg. https://example.herokuapp.com). Update it After Deploying the Bot",
             "required": false
         },
+        "TIMEZONE": {
+            "description": "IANA timezone used in generated link messages",
+            "value": "Europe/Berlin",
+            "required": false
+        },
         "HASH_LENGTH": {
             "description": "Custom hash length for generated URLs. The hash length must be greater than 5 and less than or equal to 32. Default to 6",
             "value": "6",
