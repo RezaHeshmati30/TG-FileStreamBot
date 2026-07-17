@@ -12,6 +12,7 @@ import (
 	"github.com/celestix/gotgproto/ext"
 	"github.com/celestix/gotgproto/storage"
 	"github.com/celestix/gotgproto/types"
+	"github.com/gotd/td/telegram/message/styling"
 	"github.com/gotd/td/tg"
 )
 
@@ -97,11 +98,13 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 	)
 	hash := utils.GetShortHash(fullHash)
 	link := fmt.Sprintf("%s/stream/%d?hash=%s", config.ValueOf.Host, messageID, hash)
-	text := fmt.Sprintf(
-		"✅ Your file is ready!\n\n🔗 Direct link:\n%s\n\n📄 File name:\n%s\n\nUse the link above to open or stream the file directly in your browser. You can also use the buttons below.",
-		link,
-		file.FileName,
-	)
+	text := []styling.StyledTextOption{
+		styling.Plain("✅ Your file is ready!\n\n🔗 Direct link:\n"),
+		styling.Code(link),
+		styling.Plain("\n\n📄 File name:\n"),
+		styling.Plain(file.FileName),
+		styling.Plain("\n\nUse the code above to copy the direct link. You can also use the buttons below to open or download the file."),
+	}
 	row := tg.KeyboardButtonRow{
 		Buttons: []tg.KeyboardButtonClass{
 			&tg.KeyboardButtonURL{
@@ -120,14 +123,14 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 		Rows: []tg.KeyboardButtonRow{row},
 	}
 	if strings.Contains(link, "http://localhost") {
-		_, err = ctx.Reply(u, ext.ReplyTextString(text), &ext.ReplyOpts{
-			NoWebpage:        false,
+		_, err = ctx.Reply(u, ext.ReplyTextStyledTextArray(text), &ext.ReplyOpts{
+			NoWebpage:        true,
 			ReplyToMessageId: u.EffectiveMessage.ID,
 		})
 	} else {
-		_, err = ctx.Reply(u, ext.ReplyTextString(text), &ext.ReplyOpts{
+		_, err = ctx.Reply(u, ext.ReplyTextStyledTextArray(text), &ext.ReplyOpts{
 			Markup:           markup,
-			NoWebpage:        false,
+			NoWebpage:        true,
 			ReplyToMessageId: u.EffectiveMessage.ID,
 		})
 	}
