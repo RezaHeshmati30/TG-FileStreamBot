@@ -22,6 +22,7 @@ type HashableFileStruct struct {
 	FileSize int64
 	MimeType string
 	FileID   int64
+	Expires  int64
 }
 
 func (f *HashableFileStruct) Pack() string {

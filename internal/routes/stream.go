@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gotd/td/tg"
 	range_parser "github.com/quantumsheep/range-parser"
@@ -41,6 +42,15 @@ func getStreamRoute(ctx *gin.Context) {
 		http.Error(w, "missing hash param", http.StatusBadRequest)
 		return
 	}
+	expiresAt, err := strconv.ParseInt(ctx.Query("expires"), 10, 64)
+	if err != nil {
+		http.Error(w, "missing or invalid expires param", http.StatusBadRequest)
+		return
+	}
+	if time.Now().Unix() > expiresAt {
+		http.Error(w, "link expired", http.StatusGone)
+		return
+	}
 
 	worker := bot.GetNextWorker()
 
@@ -57,6 +67,7 @@ func getStreamRoute(ctx *gin.Context) {
 		file.FileSize,
 		file.MimeType,
 		file.ID,
+		expiresAt,
 	)
 	if !utils.CheckHash(authHash, expectedHash) {
 		http.Error(w, "invalid hash", http.StatusBadRequest)

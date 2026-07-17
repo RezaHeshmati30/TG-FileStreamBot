@@ -5,8 +5,14 @@ import (
 	"EverythingSuckz/fsb/internal/types"
 )
 
-func PackFile(fileName string, fileSize int64, mimeType string, fileID int64) string {
-	return (&types.HashableFileStruct{FileName: fileName, FileSize: fileSize, MimeType: mimeType, FileID: fileID}).Pack()
+func PackFile(fileName string, fileSize int64, mimeType string, fileID int64, expires int64) string {
+	return (&types.HashableFileStruct{
+		FileName: fileName,
+		FileSize: fileSize,
+		MimeType: mimeType,
+		FileID:   fileID,
+		Expires:  expires,
+	}).Pack()
 }
 
 func GetShortHash(fullHash string) string {

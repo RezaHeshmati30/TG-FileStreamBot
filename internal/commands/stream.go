@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"EverythingSuckz/fsb/config"
 	"EverythingSuckz/fsb/internal/utils"
@@ -90,20 +91,23 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 		ctx.Reply(u, ext.ReplyTextString(fmt.Sprintf("Error - %s", err.Error())), nil)
 		return dispatcher.EndGroups
 	}
+	createdAt := time.Now().UTC()
+	expiresAt := createdAt.Add(7 * 24 * time.Hour).Unix()
 	fullHash := utils.PackFile(
 		file.FileName,
 		file.FileSize,
 		file.MimeType,
 		file.ID,
+		expiresAt,
 	)
 	hash := utils.GetShortHash(fullHash)
-	link := fmt.Sprintf("%s/stream/%d?hash=%s", config.ValueOf.Host, messageID, hash)
+	link := fmt.Sprintf("%s/stream/%d?hash=%s&expires=%d", config.ValueOf.Host, messageID, hash, expiresAt)
 	text := []styling.StyledTextOption{
-		styling.Plain("✅ Your file is ready!\n\n🔗 Direct link:\n"),
+		styling.Plain("✅ Your link is ready!\n\n🔗 Direct Link (Tap to copy):\n"),
 		styling.Code(link),
 		styling.Plain("\n\n📄 File name:\n"),
 		styling.Plain(file.FileName),
-		styling.Plain("\n\nUse the code above to copy the direct link. You can also use the buttons below to open or download the file."),
+		styling.Plain(fmt.Sprintf("\n\n🕒 Created: %s UTC\n⏳ Valid for 7 days", createdAt.Format("02 Jan 2006, 15:04"))),
 	}
 	row := tg.KeyboardButtonRow{
 		Buttons: []tg.KeyboardButtonClass{
