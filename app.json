@@ -28,6 +28,12 @@
         "LOG_CHANNEL": {
             "description": "channel ID for the log channel where the bot will forward media messages and store these files"
         },
+        "OWNER_ID": {
+            "description": "Telegram user ID of the only account allowed to manage bot access"
+        },
+        "ACCESS_CHANNEL": {
+            "description": "ID of the private Telegram channel used to persist access changes"
+        },
         "HOST": {
             "description": "A Fully Qualified Domain Name or Heroku App URL. (eg. https://example.herokuapp.com). Update it After Deploying the Bot",
             "required": false

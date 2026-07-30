@@ -42,6 +42,8 @@ type config struct {
 	ApiHash        string       `envconfig:"API_HASH" required:"true"`
 	BotToken       string       `envconfig:"BOT_TOKEN" required:"true"`
 	LogChannelID   int64        `envconfig:"LOG_CHANNEL" required:"true"`
+	AccessChannelID int64       `envconfig:"ACCESS_CHANNEL" required:"true"`
+	OwnerID        int64        `envconfig:"OWNER_ID" required:"true"`
 	Dev            bool         `envconfig:"DEV" default:"false"`
 	Port           int          `envconfig:"PORT" default:"8080"`
 	Host           string       `envconfig:"HOST" default:""`
@@ -83,6 +85,8 @@ func SetFlagsFromConfig(cmd *cobra.Command) {
 	cmd.Flags().String("api-hash", ValueOf.ApiHash, "Telegram API Hash")
 	cmd.Flags().String("bot-token", ValueOf.BotToken, "Telegram Bot Token")
 	cmd.Flags().Int64("log-channel", ValueOf.LogChannelID, "Telegram Log Channel ID")
+	cmd.Flags().Int64("access-channel", ValueOf.AccessChannelID, "Private Telegram access channel ID")
+	cmd.Flags().Int64("owner-id", ValueOf.OwnerID, "Telegram user ID allowed to manage access")
 	cmd.Flags().Bool("dev", ValueOf.Dev, "Enable development mode")
 	cmd.Flags().IntP("port", "p", ValueOf.Port, "Server port")
 	cmd.Flags().String("host", ValueOf.Host, "Server host that will be included in links")
@@ -109,9 +113,17 @@ func (c *config) loadConfigFromArgs(log *zap.Logger, cmd *cobra.Command) {
 	if botToken != "" {
 		os.Setenv("BOT_TOKEN", botToken)
 	}
-	logChannelID, _ := cmd.Flags().GetString("log-channel")
-	if logChannelID != "" {
-		os.Setenv("LOG_CHANNEL", logChannelID)
+	logChannelID, _ := cmd.Flags().GetInt64("log-channel")
+	if logChannelID != 0 {
+		os.Setenv("LOG_CHANNEL", strconv.FormatInt(logChannelID, 10))
+	}
+	accessChannelID, _ := cmd.Flags().GetInt64("access-channel")
+	if accessChannelID != 0 {
+		os.Setenv("ACCESS_CHANNEL", strconv.FormatInt(accessChannelID, 10))
+	}
+	ownerID, _ := cmd.Flags().GetInt64("owner-id")
+	if ownerID != 0 {
+		os.Setenv("OWNER_ID", strconv.FormatInt(ownerID, 10))
 	}
 	dev, _ := cmd.Flags().GetBool("dev")
 	if dev {
@@ -199,6 +211,7 @@ func Load(log *zap.Logger, cmd *cobra.Command) {
 	defer log.Info("Loaded config")
 	ValueOf.setupEnvVars(log, cmd)
 	ValueOf.LogChannelID = int64(stripInt(log, int(ValueOf.LogChannelID)))
+	ValueOf.AccessChannelID = int64(stripInt(log, int(ValueOf.AccessChannelID)))
 	if len(ValueOf.LinkSigningKey) < 32 {
 		log.Fatal("LINK_SIGNING_KEY must contain at least 32 characters")
 	}

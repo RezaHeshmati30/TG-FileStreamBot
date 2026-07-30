@@ -144,7 +144,11 @@ func FileFromMessage(ctx context.Context, client *gotgproto.Client, messageID in
 }
 
 func GetLogChannelPeer(ctx context.Context, api *tg.Client, peerStorage *storage.PeerStorage) (*tg.InputChannel, error) {
-	cachedInputPeer := peerStorage.GetInputPeerById(config.ValueOf.LogChannelID)
+	return GetChannelPeer(ctx, api, peerStorage, config.ValueOf.LogChannelID)
+}
+
+func GetChannelPeer(ctx context.Context, api *tg.Client, peerStorage *storage.PeerStorage, channelID int64) (*tg.InputChannel, error) {
+	cachedInputPeer := peerStorage.GetInputPeerById(channelID)
 
 	switch peer := cachedInputPeer.(type) {
 	case *tg.InputPeerEmpty:
@@ -158,7 +162,7 @@ func GetLogChannelPeer(ctx context.Context, api *tg.Client, peerStorage *storage
 		return nil, errors.New("unexpected type of input peer")
 	}
 	inputChannel := &tg.InputChannel{
-		ChannelID: config.ValueOf.LogChannelID,
+		ChannelID: channelID,
 	}
 	channels, err := api.ChannelsGetChannels(ctx, []tg.InputChannelClass{inputChannel})
 	if err != nil {

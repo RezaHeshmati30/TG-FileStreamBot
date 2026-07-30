@@ -47,6 +47,9 @@ func StartClient(log *zap.Logger) (*gotgproto.Client, error) {
 		if result.err != nil {
 			return nil, result.err
 		}
+		if err := commands.InitializeAccess(ctx, result.client, log); err != nil {
+			return nil, err
+		}
 		commands.Load(log, result.client.Dispatcher)
 		log.Info("Client started", zap.String("username", result.client.Self.Username))
 		Bot = result.client
