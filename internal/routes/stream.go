@@ -37,9 +37,9 @@ func getStreamRoute(ctx *gin.Context) {
 		return
 	}
 
-	authHash := ctx.Query("hash")
-	if authHash == "" {
-		http.Error(w, "missing hash param", http.StatusBadRequest)
+	signature := ctx.Query("signature")
+	if signature == "" {
+		http.Error(w, "missing signature param", http.StatusBadRequest)
 		return
 	}
 	expiresAt, err := strconv.ParseInt(ctx.Query("expires"), 10, 64)
@@ -62,15 +62,15 @@ func getStreamRoute(ctx *gin.Context) {
 		return
 	}
 
-	expectedHash := utils.PackFile(
+	expectedSignature := utils.SignFile(
 		file.FileName,
 		file.FileSize,
 		file.MimeType,
 		file.ID,
 		expiresAt,
 	)
-	if !utils.CheckHash(authHash, expectedHash) {
-		http.Error(w, "invalid hash", http.StatusBadRequest)
+	if !utils.CheckSignature(signature, expectedSignature) {
+		http.Error(w, "invalid signature", http.StatusForbidden)
 		return
 	}
 

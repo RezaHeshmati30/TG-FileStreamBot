@@ -124,15 +124,14 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 	location := displayLocation()
 	createdAtDisplay := createdAt.In(location)
 	expiresAtDisplay := time.Unix(expiresAt, 0).In(location)
-	fullHash := utils.PackFile(
+	signature := utils.SignFile(
 		file.FileName,
 		file.FileSize,
 		file.MimeType,
 		file.ID,
 		expiresAt,
 	)
-	hash := utils.GetShortHash(fullHash)
-	link := fmt.Sprintf("%s/stream/%d?hash=%s&expires=%d", config.ValueOf.Host, messageID, hash, expiresAt)
+	link := fmt.Sprintf("%s/stream/%d?signature=%s&expires=%d", config.ValueOf.Host, messageID, signature, expiresAt)
 	text := []styling.StyledTextOption{
 		styling.Plain("✅ Your link is ready!\n\n🔗 "),
 		styling.Bold("Direct Link"),

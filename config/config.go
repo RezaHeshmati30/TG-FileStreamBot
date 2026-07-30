@@ -45,7 +45,7 @@ type config struct {
 	Dev            bool         `envconfig:"DEV" default:"false"`
 	Port           int          `envconfig:"PORT" default:"8080"`
 	Host           string       `envconfig:"HOST" default:""`
-	HashLength     int          `envconfig:"HASH_LENGTH" default:"6"`
+	LinkSigningKey string       `envconfig:"LINK_SIGNING_KEY" required:"true"`
 	UseSessionFile bool         `envconfig:"USE_SESSION_FILE" default:"true"`
 	UserSession    string       `envconfig:"USER_SESSION"`
 	UsePublicIP    bool         `envconfig:"USE_PUBLIC_IP" default:"false"`
@@ -86,7 +86,6 @@ func SetFlagsFromConfig(cmd *cobra.Command) {
 	cmd.Flags().Bool("dev", ValueOf.Dev, "Enable development mode")
 	cmd.Flags().IntP("port", "p", ValueOf.Port, "Server port")
 	cmd.Flags().String("host", ValueOf.Host, "Server host that will be included in links")
-	cmd.Flags().Int("hash-length", ValueOf.HashLength, "Hash length in links")
 	cmd.Flags().Bool("use-session-file", ValueOf.UseSessionFile, "Use session files")
 	cmd.Flags().String("user-session", ValueOf.UserSession, "Pyrogram user session")
 	cmd.Flags().Bool("use-public-ip", ValueOf.UsePublicIP, "Use public IP instead of local IP")
@@ -125,10 +124,6 @@ func (c *config) loadConfigFromArgs(log *zap.Logger, cmd *cobra.Command) {
 	host, _ := cmd.Flags().GetString("host")
 	if host != "" {
 		os.Setenv("HOST", host)
-	}
-	hashLength, _ := cmd.Flags().GetInt("hash-length")
-	if hashLength != 0 {
-		os.Setenv("HASH_LENGTH", strconv.Itoa(hashLength))
 	}
 	useSessionFile, _ := cmd.Flags().GetBool("use-session-file")
 	if useSessionFile {
@@ -204,17 +199,8 @@ func Load(log *zap.Logger, cmd *cobra.Command) {
 	defer log.Info("Loaded config")
 	ValueOf.setupEnvVars(log, cmd)
 	ValueOf.LogChannelID = int64(stripInt(log, int(ValueOf.LogChannelID)))
-	if ValueOf.HashLength == 0 {
-		log.Sugar().Info("HASH_LENGTH can't be 0, defaulting to 6")
-		ValueOf.HashLength = 6
-	}
-	if ValueOf.HashLength > 32 {
-		log.Sugar().Info("HASH_LENGTH can't be more than 32, changing to 32")
-		ValueOf.HashLength = 32
-	}
-	if ValueOf.HashLength < 5 {
-		log.Sugar().Info("HASH_LENGTH can't be less than 5, defaulting to 6")
-		ValueOf.HashLength = 6
+	if len(ValueOf.LinkSigningKey) < 32 {
+		log.Fatal("LINK_SIGNING_KEY must contain at least 32 characters")
 	}
 	if ValueOf.StreamConcurrency <= 0 {
 		log.Sugar().Info("STREAM_CONCURRENCY must be greater than 0, defaulting to 4")

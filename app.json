@@ -22,6 +22,9 @@
         "BOT_TOKEN": {
             "description": "Get this value from @BotFather"
         },
+        "LINK_SIGNING_KEY": {
+            "description": "A random secret with at least 32 bytes used to sign expiring links"
+        },
         "LOG_CHANNEL": {
             "description": "channel ID for the log channel where the bot will forward media messages and store these files"
         },
@@ -32,11 +35,6 @@
         "TIMEZONE": {
             "description": "IANA timezone used in generated link messages",
             "value": "Europe/Berlin",
-            "required": false
-        },
-        "HASH_LENGTH": {
-            "description": "Custom hash length for generated URLs. The hash length must be greater than 5 and less than or equal to 32. Default to 6",
-            "value": "6",
             "required": false
         },
         "USE_SESSION_FILE": {
