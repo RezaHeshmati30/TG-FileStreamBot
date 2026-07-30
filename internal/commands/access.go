@@ -104,7 +104,10 @@ func loadPinnedAccessState(ctx context.Context, api *tg.Client, channel *tg.Inpu
 	if err != nil {
 		return 0, accessState{}, fmt.Errorf("read pinned ACCESS_CHANNEL message: %w", err)
 	}
-	messages := result.GetMessages()
+	messages, err := messagesFromResult(result)
+	if err != nil {
+		return 0, accessState{}, err
+	}
 	if len(messages) != 1 {
 		return 0, accessState{}, fmt.Errorf("pinned ACCESS_CHANNEL message was not found")
 	}
@@ -117,6 +120,19 @@ func loadPinnedAccessState(ctx context.Context, api *tg.Client, channel *tg.Inpu
 		return 0, accessState{}, fmt.Errorf("ACCESS_CHANNEL has an unrelated pinned message; unpin it and restart the bot")
 	}
 	return pinnedID, state, nil
+}
+
+func messagesFromResult(result tg.MessagesMessagesClass) ([]tg.MessageClass, error) {
+	switch value := result.(type) {
+	case *tg.MessagesChannelMessages:
+		return value.Messages, nil
+	case *tg.MessagesMessages:
+		return value.Messages, nil
+	case *tg.MessagesMessagesSlice:
+		return value.Messages, nil
+	default:
+		return nil, fmt.Errorf("pinned ACCESS_CHANNEL message returned unexpected result type %T", result)
+	}
 }
 
 func createPinnedAccessState(ctx context.Context, api *tg.Client, peer *tg.InputPeerChannel, users map[int64]struct{}) (int, error) {
