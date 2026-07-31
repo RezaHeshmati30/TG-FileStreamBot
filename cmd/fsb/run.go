@@ -63,8 +63,9 @@ func getRouter(log *zap.Logger) *gin.Engine {
 	} else {
 		gin.SetMode(gin.ReleaseMode)
 	}
-	router := gin.Default()
-	router.Use(gin.ErrorLogger())
+	router := gin.New()
+	httpLogger := log.Named("HTTP")
+	router.Use(safeRecovery(httpLogger), safeRequestLogger(httpLogger))
 	router.GET("/", func(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, types.RootResponse{
 			Message: "Server is running.",
@@ -75,4 +76,29 @@ func getRouter(log *zap.Logger) *gin.Engine {
 	})
 	routes.Load(log, router)
 	return router
+}
+
+func safeRequestLogger(log *zap.Logger) gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		startedAt := time.Now()
+		ctx.Next()
+		for _, requestError := range ctx.Errors {
+			log.Error("HTTP handler error", zap.String("error", requestError.Error()))
+		}
+
+		log.Info(
+			"HTTP request",
+			zap.String("method", ctx.Request.Method),
+			zap.String("path", ctx.Request.URL.Path),
+			zap.Int("status", ctx.Writer.Status()),
+			zap.Duration("latency", time.Since(startedAt)),
+		)
+	}
+}
+
+func safeRecovery(log *zap.Logger) gin.HandlerFunc {
+	return gin.CustomRecovery(func(ctx *gin.Context, recovered any) {
+		log.Error("HTTP handler panic", zap.String("error", fmt.Sprint(recovered)))
+		ctx.AbortWithStatus(http.StatusInternalServerError)
+	})
 }
