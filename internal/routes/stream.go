@@ -33,22 +33,22 @@ func getStreamRoute(ctx *gin.Context) {
 	messageIDParm := ctx.Param("messageID")
 	messageID, err := strconv.Atoi(messageIDParm)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		renderStreamError(ctx, http.StatusBadRequest, "Invalid link", "This file link is malformed and cannot be opened.")
 		return
 	}
 
 	signature := ctx.Query("signature")
 	if signature == "" {
-		http.Error(w, "missing signature param", http.StatusBadRequest)
+		renderStreamError(ctx, http.StatusBadRequest, "Incomplete link", "This file link is missing required information.")
 		return
 	}
 	expiresAt, err := strconv.ParseInt(ctx.Query("expires"), 10, 64)
 	if err != nil {
-		http.Error(w, "missing or invalid expires param", http.StatusBadRequest)
+		renderStreamError(ctx, http.StatusBadRequest, "Incomplete link", "This file link is missing or contains invalid expiration information.")
 		return
 	}
 	if time.Now().Unix() > expiresAt {
-		http.Error(w, "link expired", http.StatusGone)
+		renderStreamError(ctx, http.StatusGone, "Link expired", "This link has reached the end of its 7-day validity period and is no longer available.")
 		return
 	}
 
@@ -58,7 +58,8 @@ func getStreamRoute(ctx *gin.Context) {
 		return utils.FileFromMessage(ctx, worker.Client, messageID)
 	})
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		log.Warn("File for stream link is unavailable", zap.Error(err))
+		renderStreamError(ctx, http.StatusNotFound, "File unavailable", "The requested file could not be found or is no longer available.")
 		return
 	}
 
@@ -70,7 +71,7 @@ func getStreamRoute(ctx *gin.Context) {
 		expiresAt,
 	)
 	if !utils.CheckSignature(signature, expectedSignature) {
-		http.Error(w, "invalid signature", http.StatusForbidden)
+		renderStreamError(ctx, http.StatusForbidden, "Invalid link", "This link is invalid or has been modified and cannot be used.")
 		return
 	}
 
@@ -82,12 +83,14 @@ func getStreamRoute(ctx *gin.Context) {
 			Limit:    1024 * 1024,
 		})
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Error("Failed to download photo", zap.Error(err))
+			renderStreamError(ctx, http.StatusBadGateway, "File temporarily unavailable", "The file could not be loaded right now. Please try again later.")
 			return
 		}
 		result, ok := res.(*tg.UploadFile)
 		if !ok {
-			http.Error(w, "unexpected response", http.StatusInternalServerError)
+			log.Error("Unexpected Telegram response while downloading photo", zap.String("type", fmt.Sprintf("%T", res)))
+			renderStreamError(ctx, http.StatusInternalServerError, "Something went wrong", "The file could not be prepared for viewing.")
 			return
 		}
 		fileBytes := result.GetBytes()
@@ -109,7 +112,7 @@ func getStreamRoute(ctx *gin.Context) {
 	} else {
 		ranges, err := range_parser.Parse(file.FileSize, r.Header.Get("Range"))
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			renderStreamError(ctx, http.StatusRequestedRangeNotSatisfiable, "Unsupported file range", "The requested part of this file is not available.")
 			return
 		}
 		start = ranges[0].Start
