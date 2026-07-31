@@ -19,6 +19,7 @@ import (
 	"github.com/celestix/gotgproto/dispatcher/handlers"
 	"github.com/celestix/gotgproto/ext"
 	"github.com/celestix/gotgproto/storage"
+	"github.com/gotd/td/telegram/message/styling"
 	"github.com/gotd/td/tg"
 	"go.uber.org/zap"
 )
@@ -26,18 +27,20 @@ import (
 const accessStatePrefix = "FSB_ACCESS_STATE_V1 "
 
 type accessState struct {
-	Users     []int64 `json:"users"`
-	ActorID   int64   `json:"actor_id"`
-	UpdatedAt int64   `json:"updated_at"`
+	Users     []int64          `json:"users"`
+	Usernames map[string]string `json:"usernames,omitempty"`
+	ActorID   int64            `json:"actor_id"`
+	UpdatedAt int64            `json:"updated_at"`
 }
 
 type accessStore struct {
 	mu        sync.RWMutex
 	users     map[int64]struct{}
+	usernames map[int64]string
 	messageID int
 }
 
-var botAccess = &accessStore{users: make(map[int64]struct{})}
+var botAccess = &accessStore{users: make(map[int64]struct{}), usernames: make(map[int64]string)}
 
 func (m *command) LoadAccess(dispatcher dispatcher.Dispatcher) {
 	log := m.log.Named("access")
@@ -58,6 +61,7 @@ func InitializeAccess(ctx context.Context, client *gotgproto.Client, log *zap.Lo
 	peer := &tg.InputPeerChannel{ChannelID: channel.ChannelID, AccessHash: channel.AccessHash}
 
 	users := make(map[int64]struct{}, len(config.ValueOf.AllowedUsers)+1)
+	usernames := make(map[int64]string)
 	for _, userID := range config.ValueOf.AllowedUsers {
 		users[userID] = struct{}{}
 	}
@@ -68,17 +72,19 @@ func InitializeAccess(ctx context.Context, client *gotgproto.Client, log *zap.Lo
 		return err
 	}
 	if messageID == 0 {
-		messageID, err = createPinnedAccessState(ctx, client.API(), peer, users)
+		messageID, err = createPinnedAccessState(ctx, client.API(), peer, users, usernames)
 		if err != nil {
 			return fmt.Errorf("create pinned access state: %w", err)
 		}
 	} else {
 		users = usersFromState(state)
+		usernames = usernamesFromState(state)
 		users[config.ValueOf.OwnerID] = struct{}{}
 	}
 
 	botAccess.mu.Lock()
 	botAccess.users = users
+	botAccess.usernames = usernames
 	botAccess.messageID = messageID
 	botAccess.mu.Unlock()
 	log.Info("Loaded access list", zap.Int("users", len(users)), zap.Int("message_id", messageID))
@@ -137,8 +143,8 @@ func messagesFromResult(result tg.MessagesMessagesClass) ([]tg.MessageClass, err
 	}
 }
 
-func createPinnedAccessState(ctx context.Context, api *tg.Client, peer *tg.InputPeerChannel, users map[int64]struct{}) (int, error) {
-	text, err := encodeAccessState(users, config.ValueOf.OwnerID)
+func createPinnedAccessState(ctx context.Context, api *tg.Client, peer *tg.InputPeerChannel, users map[int64]struct{}, usernames map[int64]string) (int, error) {
+	text, err := encodeAccessState(users, usernames, config.ValueOf.OwnerID)
 	if err != nil {
 		return 0, err
 	}
@@ -205,9 +211,26 @@ func usersFromState(state accessState) map[int64]struct{} {
 	return users
 }
 
-func encodeAccessState(users map[int64]struct{}, actorID int64) (string, error) {
+func usernamesFromState(state accessState) map[int64]string {
+	usernames := make(map[int64]string, len(state.Usernames))
+	for rawUserID, username := range state.Usernames {
+		userID, err := strconv.ParseInt(rawUserID, 10, 64)
+		if err == nil && userID > 0 && username != "" {
+			usernames[userID] = username
+		}
+	}
+	return usernames
+}
+
+func encodeAccessState(users map[int64]struct{}, usernames map[int64]string, actorID int64) (string, error) {
 	userIDs := sortedUserIDs(users)
-	data, err := json.Marshal(accessState{Users: userIDs, ActorID: actorID, UpdatedAt: time.Now().Unix()})
+	storedUsernames := make(map[string]string)
+	for _, userID := range userIDs {
+		if username := usernames[userID]; username != "" {
+			storedUsernames[strconv.FormatInt(userID, 10)] = username
+		}
+	}
+	data, err := json.Marshal(accessState{Users: userIDs, Usernames: storedUsernames, ActorID: actorID, UpdatedAt: time.Now().Unix()})
 	if err != nil {
 		return "", err
 	}
@@ -231,6 +254,31 @@ func isAuthorized(userID int64) bool {
 	defer botAccess.mu.RUnlock()
 	_, ok := botAccess.users[userID]
 	return ok
+}
+
+func rememberAuthorizedUsername(ctx *ext.Context, user *tg.User) {
+	if user == nil || !isAuthorized(user.ID) {
+		return
+	}
+	botAccess.mu.Lock()
+	defer botAccess.mu.Unlock()
+	if botAccess.usernames[user.ID] == user.Username {
+		return
+	}
+	updatedUsernames := make(map[int64]string, len(botAccess.usernames)+1)
+	for userID, username := range botAccess.usernames {
+		updatedUsernames[userID] = username
+	}
+	if user.Username == "" {
+		delete(updatedUsernames, user.ID)
+	} else {
+		updatedUsernames[user.ID] = user.Username
+	}
+	if err := persistAccessState(ctx, botAccess.messageID, botAccess.users, updatedUsernames, user.ID); err != nil {
+		utils.Logger.Warn("Could not update stored username", zap.Int64("user_id", user.ID), zap.Error(err))
+		return
+	}
+	botAccess.usernames = updatedUsernames
 }
 
 func isPrivateChat(ctx *ext.Context, u *ext.Update) bool {
@@ -318,12 +366,24 @@ func applyAccessChange(ctx *ext.Context, u *ext.Update, actor *tg.User, userID i
 	} else {
 		delete(updated, userID)
 	}
-	if err := persistAccessState(ctx, botAccess.messageID, updated, actor.ID); err != nil {
+	updatedUsernames := make(map[int64]string, len(botAccess.usernames)+1)
+	for id, username := range botAccess.usernames {
+		updatedUsernames[id] = username
+	}
+	if allow {
+		if peer := ctx.PeerStorage.GetPeerById(userID); peer != nil && peer.Username != "" {
+			updatedUsernames[userID] = peer.Username
+		}
+	} else {
+		delete(updatedUsernames, userID)
+	}
+	if err := persistAccessState(ctx, botAccess.messageID, updated, updatedUsernames, actor.ID); err != nil {
 		utils.Logger.Error("Could not persist access change", zap.Error(err))
 		ctx.Reply(u, ext.ReplyTextString("The access change could not be saved. Nothing was changed."), nil)
 		return dispatcher.EndGroups
 	}
 	botAccess.users = updated
+	botAccess.usernames = updatedUsernames
 
 	state := "denied"
 	if allow {
@@ -333,8 +393,8 @@ func applyAccessChange(ctx *ext.Context, u *ext.Update, actor *tg.User, userID i
 	return dispatcher.EndGroups
 }
 
-func persistAccessState(ctx *ext.Context, messageID int, users map[int64]struct{}, actorID int64) error {
-	text, err := encodeAccessState(users, actorID)
+func persistAccessState(ctx *ext.Context, messageID int, users map[int64]struct{}, usernames map[int64]string, actorID int64) error {
+	text, err := encodeAccessState(users, usernames, actorID)
 	if err != nil {
 		return err
 	}
@@ -362,15 +422,31 @@ func listUsers(ctx *ext.Context, u *ext.Update) error {
 
 	botAccess.mu.RLock()
 	userIDs := sortedUserIDs(botAccess.users)
-	botAccess.mu.RUnlock()
-	lines := []string{fmt.Sprintf("Authorized users (%d):", len(userIDs))}
-	for _, userID := range userIDs {
-		suffix := ""
-		if userID == config.ValueOf.OwnerID {
-			suffix = " (owner)"
-		}
-		lines = append(lines, fmt.Sprintf("• %d%s", userID, suffix))
+	usernames := make(map[int64]string, len(botAccess.usernames))
+	for userID, username := range botAccess.usernames {
+		usernames[userID] = username
 	}
-	ctx.Reply(u, ext.ReplyTextString(strings.Join(lines, "\n")), nil)
+	botAccess.mu.RUnlock()
+	text := []styling.StyledTextOption{
+		styling.Bold(fmt.Sprintf("📋 Authorized users (%d)", len(userIDs))),
+	}
+	for _, userID := range userIDs {
+		username := usernames[userID]
+		if username == "" {
+			if peer := ctx.PeerStorage.GetPeerById(userID); peer != nil {
+				username = peer.Username
+			}
+		}
+		text = append(text, styling.Plain("\n\n• "), styling.Code(strconv.FormatInt(userID, 10)))
+		if username != "" {
+			text = append(text, styling.Plain(" (@"+username+")"))
+		} else {
+			text = append(text, styling.Plain(" (no username)"))
+		}
+		if userID == config.ValueOf.OwnerID {
+			text = append(text, styling.Plain(" · owner"))
+		}
+	}
+	ctx.Reply(u, ext.ReplyTextStyledTextArray(text), nil)
 	return dispatcher.EndGroups
 }

@@ -79,6 +79,7 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 		sendUnauthorizedNotice(ctx, u)
 		return dispatcher.EndGroups
 	}
+	rememberAuthorizedUsername(ctx, u.EffectiveUser())
 	supported, err := supportedMediaFilter(u.EffectiveMessage)
 	if err != nil {
 		return err

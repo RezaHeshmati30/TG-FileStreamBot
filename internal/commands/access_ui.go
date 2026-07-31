@@ -98,19 +98,18 @@ func sendUserCard(ctx *ext.Context, u *ext.Update) error {
 
 	text := []styling.StyledTextOption{
 		styling.Plain("👤 "), styling.Bold("Your Telegram Profile"),
-		styling.Plain("\n\n🧑 "), styling.Bold("Username"), styling.Plain("\n" + username),
-		styling.Plain("\n\n🆔 "), styling.Bold("Telegram ID"), styling.Plain("\n"), styling.Code(id),
-		styling.Plain("\n\n👤 "), styling.Bold("Display Name"), styling.Plain("\n" + displayName),
-		styling.Plain("\n\n🌍 "), styling.Bold("Language"), styling.Plain("\n" + language),
-		styling.Plain("\n\n🔐 "), styling.Bold("Bot Access"), styling.Plain("\n" + accessStatus),
+		styling.Plain("\n\n👤 "), styling.Bold("Username:"), styling.Plain(" " + username),
+		styling.Plain("\n🆔 "), styling.Bold("Telegram ID:"), styling.Plain(" "), styling.Code(id),
+		styling.Plain("\n📛 "), styling.Bold("Name:"), styling.Plain(" " + displayName),
+		styling.Plain("\n🌍 "), styling.Bold("Language:"), styling.Plain(" " + language),
+		styling.Plain("\n🔐 "), styling.Bold("Bot Access:"), styling.Plain(" " + accessStatus),
 	}
 	shareText := fmt.Sprintf("Telegram ID: %s\nUsername: %s\nDisplay name: %s", id, username, displayName)
-	markup := &tg.ReplyInlineMarkup{Rows: []tg.KeyboardButtonRow{{
-		Buttons: []tg.KeyboardButtonClass{
-			&tg.KeyboardButtonCopy{Text: "📋 Copy ID", CopyText: id},
-			&tg.KeyboardButtonURL{Text: "📤 Share ID", URL: "https://t.me/share/url?url=&text=" + url.QueryEscape(shareText)},
-		},
-	}}}
+	markup := &tg.ReplyInlineMarkup{Rows: []tg.KeyboardButtonRow{
+		{Buttons: []tg.KeyboardButtonClass{&tg.KeyboardButtonCopy{Text: "📋 Copy ID", CopyText: id}}},
+		{Buttons: []tg.KeyboardButtonClass{&tg.KeyboardButtonURL{Text: "📤 Share ID", URL: "https://t.me/share/url?url=&text=" + url.QueryEscape(shareText)}}},
+	}}
+	rememberAuthorizedUsername(ctx, user)
 	peer := ctx.PeerStorage.GetInputPeerById(u.EffectiveChat().GetID())
 	if peer.Zero() {
 		return dispatcher.EndGroups

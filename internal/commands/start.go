@@ -25,6 +25,7 @@ func start(ctx *ext.Context, u *ext.Update) error {
 		sendUnauthorizedNotice(ctx, u)
 		return dispatcher.EndGroups
 	}
+	rememberAuthorizedUsername(ctx, u.EffectiveUser())
 	if chatId == config.ValueOf.OwnerID {
 		ctx.Reply(
 			u,
