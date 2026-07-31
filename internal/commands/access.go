@@ -46,6 +46,8 @@ func (m *command) LoadAccess(dispatcher dispatcher.Dispatcher) {
 	dispatcher.AddHandler(handlers.NewCommand("allow", allowUser))
 	dispatcher.AddHandler(handlers.NewCommand("deny", denyUser))
 	dispatcher.AddHandler(handlers.NewCommand("users", listUsers))
+	dispatcher.AddHandler(handlers.NewCallbackQuery(nil, handleAccessCallback))
+	dispatcher.AddHandler(handlers.NewMessage(nil, handleAccessMenu))
 }
 
 func InitializeAccess(ctx context.Context, client *gotgproto.Client, log *zap.Logger) error {
@@ -240,11 +242,7 @@ func showID(ctx *ext.Context, u *ext.Update) error {
 	if !isPrivateChat(ctx, u) {
 		return dispatcher.EndGroups
 	}
-	user := u.EffectiveUser()
-	if user != nil {
-		ctx.Reply(u, ext.ReplyTextString(fmt.Sprintf("Your Telegram user ID: %d", user.ID)), nil)
-	}
-	return dispatcher.EndGroups
+	return sendUserCard(ctx, u)
 }
 
 func allowUser(ctx *ext.Context, u *ext.Update) error {
@@ -287,7 +285,18 @@ func changeAccess(ctx *ext.Context, u *ext.Update, allow bool) error {
 		ctx.Reply(u, ext.ReplyTextString(message), nil)
 		return dispatcher.EndGroups
 	}
+	return applyAccessChange(ctx, u, actor, userID, allow)
+}
 
+func applyAccessChange(ctx *ext.Context, u *ext.Update, actor *tg.User, userID int64, allow bool) error {
+	if userID == config.ValueOf.OwnerID {
+		message := "The owner always has access."
+		if !allow {
+			message = "The owner cannot be denied access."
+		}
+		ctx.Reply(u, ext.ReplyTextString(message), nil)
+		return dispatcher.EndGroups
+	}
 	botAccess.mu.Lock()
 	defer botAccess.mu.Unlock()
 	_, authorized := botAccess.users[userID]

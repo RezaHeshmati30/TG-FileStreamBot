@@ -76,7 +76,7 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 		return dispatcher.EndGroups
 	}
 	if !isAuthorized(chatId) {
-		ctx.Reply(u, ext.ReplyTextString("You are not allowed to use this bot."), nil)
+		sendUnauthorizedNotice(ctx, u)
 		return dispatcher.EndGroups
 	}
 	supported, err := supportedMediaFilter(u.EffectiveMessage)

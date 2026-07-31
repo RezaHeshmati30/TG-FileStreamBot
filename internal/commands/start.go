@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"EverythingSuckz/fsb/config"
+
 	"github.com/celestix/gotgproto/dispatcher"
 	"github.com/celestix/gotgproto/dispatcher/handlers"
 	"github.com/celestix/gotgproto/ext"
@@ -20,7 +22,15 @@ func start(ctx *ext.Context, u *ext.Update) error {
 		return dispatcher.EndGroups
 	}
 	if !isAuthorized(chatId) {
-		ctx.Reply(u, ext.ReplyTextString("You are not allowed to use this bot."), nil)
+		sendUnauthorizedNotice(ctx, u)
+		return dispatcher.EndGroups
+	}
+	if chatId == config.ValueOf.OwnerID {
+		ctx.Reply(
+			u,
+			ext.ReplyTextString("👋 Welcome back. Send me any file to create a direct streamable link, or use the admin menu below."),
+			&ext.ReplyOpts{Markup: adminMainKeyboard()},
+		)
 		return dispatcher.EndGroups
 	}
 	ctx.Reply(u, ext.ReplyTextString("Hi, send me any file to get a direct streamable link to that file."), nil)
