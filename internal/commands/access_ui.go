@@ -49,8 +49,7 @@ func sendUnauthorizedNotice(ctx *ext.Context, u *ext.Update) {
 
 func adminMainKeyboard() *tg.ReplyKeyboardMarkup {
 	return &tg.ReplyKeyboardMarkup{
-		Resize:     true,
-		Persistent: true,
+		Resize:      true,
 		Placeholder: "Choose an admin action",
 		Rows: []tg.KeyboardButtonRow{
 			{Buttons: []tg.KeyboardButtonClass{&tg.KeyboardButton{Text: menuManageUsers}}},
@@ -61,8 +60,7 @@ func adminMainKeyboard() *tg.ReplyKeyboardMarkup {
 
 func adminUsersKeyboard() *tg.ReplyKeyboardMarkup {
 	return &tg.ReplyKeyboardMarkup{
-		Resize:     true,
-		Persistent: true,
+		Resize:      true,
 		Placeholder: "Manage bot access",
 		Rows: []tg.KeyboardButtonRow{
 			{Buttons: []tg.KeyboardButtonClass{&tg.KeyboardButton{Text: menuAllowAccess}, &tg.KeyboardButton{Text: menuDenyAccess}}},
