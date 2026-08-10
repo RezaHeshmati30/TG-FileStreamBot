@@ -27,20 +27,22 @@ import (
 const accessStatePrefix = "FSB_ACCESS_STATE_V1 "
 
 type accessState struct {
-	Users     []int64          `json:"users"`
-	Usernames map[string]string `json:"usernames,omitempty"`
-	ActorID   int64            `json:"actor_id"`
-	UpdatedAt int64            `json:"updated_at"`
+	Users             []int64           `json:"users"`
+	Usernames         map[string]string `json:"usernames,omitempty"`
+	SubtitleLanguages map[string]string `json:"subtitle_languages,omitempty"`
+	ActorID           int64             `json:"actor_id"`
+	UpdatedAt         int64             `json:"updated_at"`
 }
 
 type accessStore struct {
 	mu        sync.RWMutex
 	users     map[int64]struct{}
 	usernames map[int64]string
+	languages map[int64]string
 	messageID int
 }
 
-var botAccess = &accessStore{users: make(map[int64]struct{}), usernames: make(map[int64]string)}
+var botAccess = &accessStore{users: make(map[int64]struct{}), usernames: make(map[int64]string), languages: make(map[int64]string)}
 
 func (m *command) LoadAccess(dispatcher dispatcher.Dispatcher) {
 	log := m.log.Named("access")
@@ -62,6 +64,7 @@ func InitializeAccess(ctx context.Context, client *gotgproto.Client, log *zap.Lo
 
 	users := make(map[int64]struct{}, len(config.ValueOf.AllowedUsers)+1)
 	usernames := make(map[int64]string)
+	languages := make(map[int64]string)
 	for _, userID := range config.ValueOf.AllowedUsers {
 		users[userID] = struct{}{}
 	}
@@ -79,12 +82,14 @@ func InitializeAccess(ctx context.Context, client *gotgproto.Client, log *zap.Lo
 	} else {
 		users = usersFromState(state)
 		usernames = usernamesFromState(state)
+		languages = subtitleLanguagesFromState(state)
 		users[config.ValueOf.OwnerID] = struct{}{}
 	}
 
 	botAccess.mu.Lock()
 	botAccess.users = users
 	botAccess.usernames = usernames
+	botAccess.languages = languages
 	botAccess.messageID = messageID
 	botAccess.mu.Unlock()
 	log.Info("Loaded access list", zap.Int("users", len(users)), zap.Int("message_id", messageID))
@@ -144,7 +149,7 @@ func messagesFromResult(result tg.MessagesMessagesClass) ([]tg.MessageClass, err
 }
 
 func createPinnedAccessState(ctx context.Context, api *tg.Client, peer *tg.InputPeerChannel, users map[int64]struct{}, usernames map[int64]string) (int, error) {
-	text, err := encodeAccessState(users, usernames, config.ValueOf.OwnerID)
+	text, err := encodeAccessState(users, usernames, nil, config.ValueOf.OwnerID)
 	if err != nil {
 		return 0, err
 	}
@@ -222,7 +227,18 @@ func usernamesFromState(state accessState) map[int64]string {
 	return usernames
 }
 
-func encodeAccessState(users map[int64]struct{}, usernames map[int64]string, actorID int64) (string, error) {
+func subtitleLanguagesFromState(state accessState) map[int64]string {
+	languages := make(map[int64]string, len(state.SubtitleLanguages))
+	for rawUserID, language := range state.SubtitleLanguages {
+		userID, err := strconv.ParseInt(rawUserID, 10, 64)
+		if err == nil && userID > 0 && language != "" {
+			languages[userID] = language
+		}
+	}
+	return languages
+}
+
+func encodeAccessState(users map[int64]struct{}, usernames map[int64]string, languages map[int64]string, actorID int64) (string, error) {
 	userIDs := sortedUserIDs(users)
 	storedUsernames := make(map[string]string)
 	for _, userID := range userIDs {
@@ -230,7 +246,13 @@ func encodeAccessState(users map[int64]struct{}, usernames map[int64]string, act
 			storedUsernames[strconv.FormatInt(userID, 10)] = username
 		}
 	}
-	data, err := json.Marshal(accessState{Users: userIDs, Usernames: storedUsernames, ActorID: actorID, UpdatedAt: time.Now().Unix()})
+	storedLanguages := make(map[string]string)
+	for userID, language := range languages {
+		if _, allowed := users[userID]; allowed && language != "" {
+			storedLanguages[strconv.FormatInt(userID, 10)] = language
+		}
+	}
+	data, err := json.Marshal(accessState{Users: userIDs, Usernames: storedUsernames, SubtitleLanguages: storedLanguages, ActorID: actorID, UpdatedAt: time.Now().Unix()})
 	if err != nil {
 		return "", err
 	}
@@ -274,7 +296,7 @@ func rememberAuthorizedUsername(ctx *ext.Context, user *tg.User) {
 	} else {
 		updatedUsernames[user.ID] = user.Username
 	}
-	if err := persistAccessState(ctx, botAccess.messageID, botAccess.users, updatedUsernames, user.ID); err != nil {
+	if err := persistAccessState(ctx, botAccess.messageID, botAccess.users, updatedUsernames, botAccess.languages, user.ID); err != nil {
 		utils.Logger.Warn("Could not update stored username", zap.Int64("user_id", user.ID), zap.Error(err))
 		return
 	}
@@ -377,13 +399,21 @@ func applyAccessChange(ctx *ext.Context, u *ext.Update, actor *tg.User, userID i
 	} else {
 		delete(updatedUsernames, userID)
 	}
-	if err := persistAccessState(ctx, botAccess.messageID, updated, updatedUsernames, actor.ID); err != nil {
+	updatedLanguages := make(map[int64]string, len(botAccess.languages))
+	for id, language := range botAccess.languages {
+		updatedLanguages[id] = language
+	}
+	if !allow {
+		delete(updatedLanguages, userID)
+	}
+	if err := persistAccessState(ctx, botAccess.messageID, updated, updatedUsernames, updatedLanguages, actor.ID); err != nil {
 		utils.Logger.Error("Could not persist access change", zap.Error(err))
 		ctx.Reply(u, ext.ReplyTextString("The access change could not be saved. Nothing was changed."), nil)
 		return dispatcher.EndGroups
 	}
 	botAccess.users = updated
 	botAccess.usernames = updatedUsernames
+	botAccess.languages = updatedLanguages
 
 	state := "denied"
 	if allow {
@@ -393,8 +423,8 @@ func applyAccessChange(ctx *ext.Context, u *ext.Update, actor *tg.User, userID i
 	return dispatcher.EndGroups
 }
 
-func persistAccessState(ctx *ext.Context, messageID int, users map[int64]struct{}, usernames map[int64]string, actorID int64) error {
-	text, err := encodeAccessState(users, usernames, actorID)
+func persistAccessState(ctx *ext.Context, messageID int, users map[int64]struct{}, usernames map[int64]string, languages map[int64]string, actorID int64) error {
+	text, err := encodeAccessState(users, usernames, languages, actorID)
 	if err != nil {
 		return err
 	}
@@ -408,6 +438,27 @@ func persistAccessState(ctx *ext.Context, messageID int, users map[int64]struct{
 		Message: text,
 	})
 	return err
+}
+
+func preferredSubtitleLanguage(userID int64) string {
+	botAccess.mu.RLock()
+	defer botAccess.mu.RUnlock()
+	return botAccess.languages[userID]
+}
+
+func savePreferredSubtitleLanguage(ctx *ext.Context, userID int64, language string) error {
+	botAccess.mu.Lock()
+	defer botAccess.mu.Unlock()
+	updatedLanguages := make(map[int64]string, len(botAccess.languages)+1)
+	for id, value := range botAccess.languages {
+		updatedLanguages[id] = value
+	}
+	updatedLanguages[userID] = language
+	if err := persistAccessState(ctx, botAccess.messageID, botAccess.users, botAccess.usernames, updatedLanguages, userID); err != nil {
+		return err
+	}
+	botAccess.languages = updatedLanguages
+	return nil
 }
 
 func listUsers(ctx *ext.Context, u *ext.Update) error {

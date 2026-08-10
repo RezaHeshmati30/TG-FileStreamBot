@@ -52,3 +52,15 @@ Optional resource limits (the defaults are suitable for a small Space):
 - `SUBTITLE_PROBE_TIMEOUT_SEC=60`
 - `SUBTITLE_EXTRACT_TIMEOUT_SEC=1800`
 - `SUBTITLE_MAX_OUTPUT_MB=20`
+
+## Online subtitle search
+
+Add `SUBSOURCE_API_KEY` as a private Space secret to enable the `Search Online`
+button on video links. The bot derives a title, year, season, and episode from
+the Telegram filename, asks the user to confirm the Subsource match, and shows
+ten subtitles per page. Downloads are size-limited, safely unpacked, uploaded
+to the private log channel, and served through the existing signed-link flow.
+
+Each user chooses a subtitle language once. The preference is stored inside the
+existing pinned `FSB_ACCESS_STATE_V1` message in the private access channel and
+is reused after Space restarts. It can be changed from every online-search menu.

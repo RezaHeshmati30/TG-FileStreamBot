@@ -10,11 +10,14 @@ func TestAccessStateRemainsBackwardCompatible(t *testing.T) {
 	if len(usernamesFromState(state)) != 0 {
 		t.Fatal("legacy state should not invent usernames")
 	}
+	if len(subtitleLanguagesFromState(state)) != 0 {
+		t.Fatal("legacy state should not invent subtitle languages")
+	}
 }
 
 func TestAccessStateStoresUsernames(t *testing.T) {
 	users := map[int64]struct{}{123: {}}
-	encoded, err := encodeAccessState(users, map[int64]string{123: "maxmustermann"}, 1)
+	encoded, err := encodeAccessState(users, map[int64]string{123: "maxmustermann"}, map[int64]string{123: "german"}, 1)
 	if err != nil {
 		t.Fatalf("encode access state: %v", err)
 	}
@@ -24,5 +27,8 @@ func TestAccessStateStoresUsernames(t *testing.T) {
 	}
 	if username := usernamesFromState(state)[123]; username != "maxmustermann" {
 		t.Fatalf("expected stored username, got %q", username)
+	}
+	if language := subtitleLanguagesFromState(state)[123]; language != "german" {
+		t.Fatalf("expected stored subtitle language, got %q", language)
 	}
 }

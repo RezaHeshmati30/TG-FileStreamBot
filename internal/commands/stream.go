@@ -182,13 +182,17 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 	markup := &tg.ReplyInlineMarkup{
 		Rows: []tg.KeyboardButtonRow{row},
 	}
-	if fileIcon == "🎬" && subtitlesAvailable() {
-		markup.Rows = append(markup.Rows, tg.KeyboardButtonRow{Buttons: []tg.KeyboardButtonClass{
-			&tg.KeyboardButtonCallback{
-				Text: "💬 Subtitles",
-				Data: subtitleCallbackData("p", messageID, expiresAt, -1),
-			},
-		}})
+	if fileIcon == "🎬" {
+		var subtitleButtons []tg.KeyboardButtonClass
+		if subtitlesAvailable() {
+			subtitleButtons = append(subtitleButtons, &tg.KeyboardButtonCallback{Text: "💬 Embedded", Data: subtitleCallbackData("p", messageID, expiresAt, -1)})
+		}
+		if onlineSubtitlesAvailable() {
+			subtitleButtons = append(subtitleButtons, &tg.KeyboardButtonCallback{Text: "🔎 Search Online", Data: subtitleCallbackData("o", messageID, expiresAt, -1)})
+		}
+		if len(subtitleButtons) > 0 {
+			markup.Rows = append(markup.Rows, tg.KeyboardButtonRow{Buttons: subtitleButtons})
+		}
 	}
 	if strings.Contains(link, "http://localhost") {
 		_, err = ctx.Reply(u, ext.ReplyTextStyledTextArray(text), &ext.ReplyOpts{

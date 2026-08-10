@@ -62,9 +62,10 @@ func (m *command) LoadSubtitles(dispatcher dispatcher.Dispatcher) {
 	_, ffmpegErr := exec.LookPath("ffmpeg")
 	subtitleToolsAvailable = ffprobeErr == nil && ffmpegErr == nil
 	dispatcher.AddHandler(handlers.NewCallbackQuery(nil, handleSubtitleCallback))
+	dispatcher.AddHandler(handlers.NewCallbackQuery(nil, handleOnlineSubtitleCallback))
 	logger := m.log.Named("subtitles")
 	if !subtitleToolsAvailable {
-		logger.Error("FFmpeg tools are unavailable; subtitle buttons will be disabled", zap.Error(errors.Join(ffprobeErr, ffmpegErr)))
+		logger.Error("FFmpeg tools are unavailable; embedded subtitle extraction will be disabled", zap.Error(errors.Join(ffprobeErr, ffmpegErr)))
 		return
 	}
 	logger.Info("Loaded", zap.Int("concurrency", config.ValueOf.SubtitleConcurrency))
@@ -115,7 +116,7 @@ func handleSubtitleCallback(ctx *ext.Context, u *ext.Update) error {
 		return dispatcher.EndGroups
 	}
 	if !subtitleToolsAvailable {
-		if action != "d" {
+		if action != "d" && action != "o" {
 			answerSubtitleCallback(ctx, u, "Subtitle tools are not installed on the server.", true)
 			return dispatcher.EndGroups
 		}
@@ -131,6 +132,9 @@ func handleSubtitleCallback(ctx *ext.Context, u *ext.Update) error {
 	case "d":
 		answerSubtitleCallback(ctx, u, "Sending the SRT file…", false)
 		return sendSubtitleDocument(ctx, u, messageID)
+	case "o":
+		answerSubtitleCallback(ctx, u, "Searching Subsource…", false)
+		return startOnlineSubtitleSearch(ctx, u, messageID, expires)
 	default:
 		answerSubtitleCallback(ctx, u, "This subtitle action is invalid.", true)
 		return dispatcher.EndGroups
@@ -428,7 +432,7 @@ func sendSubtitleResult(ctx *ext.Context, u *ext.Update, result subtitleResult, 
 	markup := &tg.ReplyInlineMarkup{Rows: []tg.KeyboardButtonRow{
 		{Buttons: []tg.KeyboardButtonClass{&tg.KeyboardButtonURL{Text: "💬 Open subtitle", URL: link}}},
 		{Buttons: []tg.KeyboardButtonClass{&tg.KeyboardButtonCallback{
-			Text: "⬇️ Download SRT",
+			Text: "⬇️ Download Subtitle",
 			Data: subtitleCallbackData("d", result.messageID, expires, -1),
 		}}},
 	}}

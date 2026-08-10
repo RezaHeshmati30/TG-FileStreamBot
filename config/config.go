@@ -48,6 +48,7 @@ type config struct {
 	Port            int          `envconfig:"PORT" default:"8080"`
 	Host            string       `envconfig:"HOST" default:""`
 	LinkSigningKey  string       `envconfig:"LINK_SIGNING_KEY" required:"true"`
+	SubsourceAPIKey string       `envconfig:"SUBSOURCE_API_KEY"`
 	UseSessionFile  bool         `envconfig:"USE_SESSION_FILE" default:"true"`
 	UserSession     string       `envconfig:"USER_SESSION"`
 	UsePublicIP     bool         `envconfig:"USE_PUBLIC_IP" default:"false"`
