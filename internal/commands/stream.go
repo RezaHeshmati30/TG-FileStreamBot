@@ -169,7 +169,7 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 	markup := &tg.ReplyInlineMarkup{
 		Rows: []tg.KeyboardButtonRow{row},
 	}
-	if strings.Contains(file.MimeType, "video") {
+	if strings.Contains(file.MimeType, "video") && subtitlesAvailable() {
 		markup.Rows = append(markup.Rows, tg.KeyboardButtonRow{Buttons: []tg.KeyboardButtonClass{
 			&tg.KeyboardButtonCallback{
 				Text: "💬 Subtitles",

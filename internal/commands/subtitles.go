@@ -32,8 +32,9 @@ import (
 const subtitleCallbackPrefix = "sub:"
 
 var (
-	subtitleSlots chan struct{}
-	subtitleCache = struct {
+	subtitleSlots          chan struct{}
+	subtitleToolsAvailable bool
+	subtitleCache          = struct {
 		sync.RWMutex
 		items map[string]subtitleResult
 	}{items: make(map[string]subtitleResult)}
@@ -56,8 +57,20 @@ type subtitleTrack struct {
 
 func (m *command) LoadSubtitles(dispatcher dispatcher.Dispatcher) {
 	subtitleSlots = make(chan struct{}, config.ValueOf.SubtitleConcurrency)
+	_, ffprobeErr := exec.LookPath("ffprobe")
+	_, ffmpegErr := exec.LookPath("ffmpeg")
+	subtitleToolsAvailable = ffprobeErr == nil && ffmpegErr == nil
 	dispatcher.AddHandler(handlers.NewCallbackQuery(nil, handleSubtitleCallback))
-	m.log.Named("subtitles").Info("Loaded", zap.Int("concurrency", config.ValueOf.SubtitleConcurrency))
+	logger := m.log.Named("subtitles")
+	if !subtitleToolsAvailable {
+		logger.Error("FFmpeg tools are unavailable; subtitle buttons will be disabled", zap.Error(errors.Join(ffprobeErr, ffmpegErr)))
+		return
+	}
+	logger.Info("Loaded", zap.Int("concurrency", config.ValueOf.SubtitleConcurrency))
+}
+
+func subtitlesAvailable() bool {
+	return subtitleToolsAvailable
 }
 
 func subtitleCallbackData(action string, messageID int, expires int64, trackIndex int) []byte {
@@ -100,6 +113,10 @@ func handleSubtitleCallback(ctx *ext.Context, u *ext.Update) error {
 		answerSubtitleCallback(ctx, u, "This file link has expired.", true)
 		return dispatcher.EndGroups
 	}
+	if !subtitleToolsAvailable {
+		answerSubtitleCallback(ctx, u, "Subtitle tools are not installed on the server.", true)
+		return dispatcher.EndGroups
+	}
 
 	switch action {
 	case "p":
@@ -129,7 +146,7 @@ func showSubtitleTracks(ctx *ext.Context, u *ext.Update, messageID int, expires 
 		return subtitleFailure(ctx, u, "The video is no longer available.", err)
 	}
 	if !strings.Contains(file.MimeType, "video") && !strings.HasSuffix(strings.ToLower(file.FileName), ".mkv") {
-		ctx.Reply(u, ext.ReplyTextString("💬 Subtitle inspection is only available for video files."), nil)
+		sendSubtitleText(ctx, u, "💬 Subtitle inspection is only available for video files.", nil)
 		return dispatcher.EndGroups
 	}
 
@@ -140,7 +157,7 @@ func showSubtitleTracks(ctx *ext.Context, u *ext.Update, messageID int, expires 
 		return subtitleFailure(ctx, u, "The subtitle tracks could not be inspected.", err)
 	}
 	if len(tracks) == 0 {
-		ctx.Reply(u, ext.ReplyTextString("💬 No embedded subtitle tracks were found in this video."), nil)
+		sendSubtitleText(ctx, u, "💬 No embedded subtitle tracks were found in this video.", nil)
 		return dispatcher.EndGroups
 	}
 	if len(tracks) > 20 {
@@ -163,9 +180,7 @@ func showSubtitleTracks(ctx *ext.Context, u *ext.Update, messageID int, expires 
 			},
 		}})
 	}
-	ctx.Reply(u, ext.ReplyTextString("💬 Embedded subtitles\n\nChoose the text subtitle track you want to prepare as an SRT file."), &ext.ReplyOpts{
-		Markup: &tg.ReplyInlineMarkup{Rows: rows},
-	})
+	sendSubtitleText(ctx, u, "💬 Embedded subtitles\n\nChoose the text subtitle track you want to prepare as an SRT file.", &tg.ReplyInlineMarkup{Rows: rows})
 	return dispatcher.EndGroups
 }
 
@@ -182,7 +197,7 @@ func prepareSubtitle(ctx *ext.Context, u *ext.Update, messageID int, expires int
 	case subtitleSlots <- struct{}{}:
 		defer func() { <-subtitleSlots }()
 	default:
-		ctx.Reply(u, ext.ReplyTextString("⏳ Another subtitle is currently being prepared. Please try again shortly."), nil)
+		sendSubtitleText(ctx, u, "⏳ Another subtitle is currently being prepared. Please try again shortly.", nil)
 		return dispatcher.EndGroups
 	}
 
@@ -198,21 +213,21 @@ func prepareSubtitle(ctx *ext.Context, u *ext.Update, messageID int, expires int
 	}
 	track, found := findSubtitleTrack(tracks, trackIndex)
 	if !found {
-		ctx.Reply(u, ext.ReplyTextString("💬 The selected subtitle track was not found."), nil)
+		sendSubtitleText(ctx, u, "💬 The selected subtitle track was not found.", nil)
 		return dispatcher.EndGroups
 	}
 	if !supportedSubtitleCodec(track.CodecName) {
-		ctx.Reply(u, ext.ReplyTextString("💬 This is an image-based or unsupported subtitle track and cannot be converted to SRT."), nil)
+		sendSubtitleText(ctx, u, "💬 This is an image-based or unsupported subtitle track and cannot be converted to SRT.", nil)
 		return dispatcher.EndGroups
 	}
 
-	ctx.Reply(u, ext.ReplyTextString("⏳ Preparing the selected subtitle. Large videos may take several minutes because the file must be read up to the end."), nil)
+	sendSubtitleText(ctx, u, "⏳ Preparing the selected subtitle. Large videos may take several minutes because the file must be read up to the end.", nil)
 	extractCtx, cancel := context.WithTimeout(ctx, time.Duration(config.ValueOf.SubtitleExtractTimeoutSec)*time.Second)
 	defer cancel()
 	path, err := extractSubtitle(extractCtx, internalStreamURL(file, messageID, expires), trackIndex, subtitleOutputName(file.FileName, track))
 	if err != nil {
 		if errors.Is(extractCtx.Err(), context.DeadlineExceeded) {
-			ctx.Reply(u, ext.ReplyTextString("⌛ Subtitle extraction exceeded the configured time limit."), nil)
+			sendSubtitleText(ctx, u, "⌛ Subtitle extraction exceeded the configured time limit.", nil)
 			return dispatcher.EndGroups
 		}
 		return subtitleFailure(ctx, u, "The subtitle could not be extracted.", err)
@@ -414,12 +429,55 @@ func sendSubtitleResult(ctx *ext.Context, u *ext.Update, result subtitleResult, 
 		styling.Code(link),
 		styling.Plain("\n\n⏳ The link expires together with the original video link."),
 	}
-	ctx.Reply(u, ext.ReplyTextStyledTextArray(text), &ext.ReplyOpts{Markup: markup, NoWebpage: true})
+	sendSubtitleStyledText(ctx, u, text, markup)
 	return dispatcher.EndGroups
 }
 
 func subtitleFailure(ctx *ext.Context, u *ext.Update, userMessage string, err error) error {
 	utils.Logger.Error("Subtitle operation failed", zap.Error(err))
-	ctx.Reply(u, ext.ReplyTextString("❌ "+userMessage), nil)
+	sendSubtitleText(ctx, u, "❌ "+userMessage, nil)
 	return dispatcher.EndGroups
+}
+
+func subtitlePeer(ctx *ext.Context, u *ext.Update) tg.InputPeerClass {
+	if u.CallbackQuery == nil {
+		return &tg.InputPeerEmpty{}
+	}
+	return ctx.PeerStorage.GetInputPeerById(u.CallbackQuery.UserID)
+}
+
+func sendSubtitleText(ctx *ext.Context, u *ext.Update, text string, markup tg.ReplyMarkupClass) {
+	peer := subtitlePeer(ctx, u)
+	if peer.Zero() {
+		utils.Logger.Error("Could not resolve subtitle callback peer")
+		return
+	}
+	builder := ctx.Sender.To(peer)
+	var err error
+	if markup != nil {
+		_, err = builder.Markup(markup).Text(ctx, text)
+	} else {
+		_, err = builder.Text(ctx, text)
+	}
+	if err != nil {
+		utils.Logger.Error("Could not send subtitle message", zap.Error(err))
+	}
+}
+
+func sendSubtitleStyledText(ctx *ext.Context, u *ext.Update, text []styling.StyledTextOption, markup tg.ReplyMarkupClass) {
+	peer := subtitlePeer(ctx, u)
+	if peer.Zero() {
+		utils.Logger.Error("Could not resolve subtitle callback peer")
+		return
+	}
+	builder := ctx.Sender.To(peer)
+	var err error
+	if markup != nil {
+		_, err = builder.NoWebpage().Markup(markup).StyledText(ctx, text...)
+	} else {
+		_, err = builder.NoWebpage().StyledText(ctx, text...)
+	}
+	if err != nil {
+		utils.Logger.Error("Could not send styled subtitle message", zap.Error(err))
+	}
 }
