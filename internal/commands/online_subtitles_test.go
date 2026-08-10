@@ -95,6 +95,24 @@ func TestOnlineSubtitleMatchUsesStructuredEpisodeMetadata(t *testing.T) {
 	}
 }
 
+func TestOnlineSubtitleMatchKeepsSeasonPackForArchiveInspection(t *testing.T) {
+	pack := subsourceSubtitle{Name: "Example Show Season 3 Complete", FilesCount: 8}
+	if !onlineSubtitleMatchesEpisode(pack, "3", "7") {
+		t.Fatal("season pack must remain available for file-level inspection")
+	}
+	wrongPack := subsourceSubtitle{Name: "Example Show Season 1 Complete", FilesCount: 8}
+	if onlineSubtitleMatchesEpisode(wrongPack, "3", "7") {
+		t.Fatal("explicit season 1 pack must not match season 3")
+	}
+}
+
+func TestOnlineSubtitleMatchAcceptsEpisodeOnlyAfterAPIFilter(t *testing.T) {
+	subtitle := subsourceSubtitle{Name: "Example Show Episode 7 WEB-DL"}
+	if !onlineSubtitleMatchesEpisode(subtitle, "3", "7") {
+		t.Fatal("episode-only API result should remain visible")
+	}
+}
+
 func TestOnlineCallbackFitsTelegramLimit(t *testing.T) {
 	data := onlineCallback("abcdefghijkl", "dl", "2147483647")
 	if len(data) > 64 {

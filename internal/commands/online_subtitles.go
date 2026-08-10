@@ -81,18 +81,21 @@ type subsourceMovie struct {
 }
 
 type subsourceSubtitle struct {
-	ID              string
-	Name            string
-	Language        string
-	Season          string
-	Episode         string
-	ReleaseInfo     string
-	Uploader        string
-	Rating          string
-	Downloads       int64
-	HearingImpaired bool
-	Files           []string
-	Raw             map[string]any
+	ID               string
+	Name             string
+	Language         string
+	Season           string
+	Episode          string
+	ReleaseInfo      string
+	ReleaseInfoItems []string
+	Commentary       string
+	Uploader         string
+	Rating           string
+	Downloads        int64
+	HearingImpaired  bool
+	Files            []string
+	FilesCount       int64
+	Raw              map[string]any
 }
 
 type subtitleLanguage struct {
@@ -639,18 +642,21 @@ func normalizeSubsourceSubtitles(values []any, query mediaQuery) []subsourceSubt
 			continue
 		}
 		subtitle := subsourceSubtitle{
-			ID:              stringField(record, "subtitleId", "id", "subId"),
-			Name:            stringField(record, "releaseName", "releaseInfo", "name", "title", "filename", "fileName"),
-			Language:        stringField(record, "lang", "language", "languageName"),
-			Season:          stringField(record, "season", "seasonNumber", "season_number"),
-			Episode:         stringField(record, "episode", "episodeNumber", "episode_number"),
-			ReleaseInfo:     firstStringValue(record["releaseInfo"]),
-			Uploader:        stringField(record, "uploader", "author", "owner"),
-			Rating:          stringField(record, "rating"),
-			Downloads:       intField(record, "downloads", "downloadCount"),
-			HearingImpaired: boolField(record, "hi", "hearingImpaired", "hearing_impaired"),
-			Files:           normalizeOnlineFiles(record["files"]),
-			Raw:             record,
+			ID:               stringField(record, "subtitleId", "id", "subId"),
+			Name:             stringField(record, "releaseName", "releaseInfo", "name", "title", "filename", "fileName"),
+			Language:         stringField(record, "lang", "language", "languageName"),
+			Season:           stringField(record, "season", "seasonNumber", "season_number"),
+			Episode:          stringField(record, "episode", "episodeNumber", "episode_number"),
+			ReleaseInfo:      firstStringValue(record["releaseInfo"]),
+			ReleaseInfoItems: stringValues(record["releaseInfo"]),
+			Commentary:       stringField(record, "commentary", "caption"),
+			Uploader:         stringField(record, "uploader", "author", "owner"),
+			Rating:           stringField(record, "rating"),
+			Downloads:        intField(record, "downloads", "downloadCount"),
+			HearingImpaired:  boolField(record, "hi", "hearingImpaired", "hearing_impaired"),
+			Files:            normalizeOnlineFiles(record["files"]),
+			FilesCount:       intField(record, "filesCount", "fileCount"),
+			Raw:              record,
 		}
 		if subtitle.ID == "" {
 			continue
@@ -676,26 +682,79 @@ func onlineSubtitleMatchesEpisode(subtitle subsourceSubtitle, season, episode st
 			return actualSeason == s && actualEpisode == e
 		}
 	}
-	text := strings.Join(append([]string{subtitle.Name, subtitle.ReleaseInfo}, subtitle.Files...), " ")
-	return containsExactSeasonEpisode(text, s, e)
+	text := subtitleReleaseText(subtitle)
+	pairs := seasonEpisodePairs(text)
+	if len(pairs) > 0 {
+		for _, pair := range pairs {
+			if pair[0] == s && pair[1] == e {
+				return true
+			}
+		}
+		return false
+	}
+	if isSeasonPackSubtitle(subtitle) {
+		if packSeason := seasonNumberFromText(text); packSeason > 0 && packSeason != s {
+			return false
+		}
+		return true
+	}
+	return containsEpisodeOnly(text, e)
 }
 
 func containsExactSeasonEpisode(text string, season, episode int) bool {
-	normalized := strings.ToLower(strings.NewReplacer(".", "", "_", "", "-", "", " ", "").Replace(text))
-	patterns := []string{
-		fmt.Sprintf("s%02de%02d", season, episode),
-		fmt.Sprintf("s%de%02d", season, episode),
-		fmt.Sprintf("s%02de%d", season, episode),
-		fmt.Sprintf("s%de%d", season, episode),
-		fmt.Sprintf("%dx%02d", season, episode),
-		fmt.Sprintf("%dx%d", season, episode),
-	}
-	for _, pattern := range patterns {
-		if strings.Contains(normalized, pattern) {
+	for _, pair := range seasonEpisodePairs(text) {
+		if pair[0] == season && pair[1] == episode {
 			return true
 		}
 	}
 	return false
+}
+
+func subtitleReleaseText(subtitle subsourceSubtitle) string {
+	parts := []string{subtitle.Name, subtitle.ReleaseInfo, subtitle.Commentary}
+	parts = append(parts, subtitle.ReleaseInfoItems...)
+	parts = append(parts, subtitle.Files...)
+	return strings.Join(parts, " ")
+}
+
+func isSeasonPackSubtitle(subtitle subsourceSubtitle) bool {
+	if subtitle.FilesCount > 1 || len(subtitle.Files) > 1 {
+		return true
+	}
+	return regexp.MustCompile(`(?i)\b(?:complete|season|s\d{1,2})\b`).MatchString(subtitleReleaseText(subtitle))
+}
+
+func seasonEpisodePairs(text string) [][2]int {
+	pattern := regexp.MustCompile(`(?i)(?:\bs\s*0*(\d{1,2})\s*e\s*0*(\d{1,3})\b|\b0*(\d{1,2})\s*x\s*0*(\d{1,3})\b)`)
+	matches := pattern.FindAllStringSubmatch(text, -1)
+	result := make([][2]int, 0, len(matches))
+	for _, match := range matches {
+		seasonText, episodeText := match[1], match[2]
+		if seasonText == "" {
+			seasonText, episodeText = match[3], match[4]
+		}
+		seasonNumber, seasonErr := strconv.Atoi(seasonText)
+		episodeNumber, episodeErr := strconv.Atoi(episodeText)
+		if seasonErr == nil && episodeErr == nil {
+			result = append(result, [2]int{seasonNumber, episodeNumber})
+		}
+	}
+	return result
+}
+
+func seasonNumberFromText(text string) int {
+	pattern := regexp.MustCompile(`(?i)\b(?:season|s)\s*0*(\d{1,2})\b`)
+	match := pattern.FindStringSubmatch(text)
+	if len(match) != 2 {
+		return 0
+	}
+	value, _ := strconv.Atoi(match[1])
+	return value
+}
+
+func containsEpisodeOnly(text string, episode int) bool {
+	pattern := regexp.MustCompile(fmt.Sprintf(`(?i)\b(?:e|ep|episode)[ ._-]*0*%d\b`, episode))
+	return pattern.MatchString(text)
 }
 
 func downloadOnlineSubtitle(ctx *ext.Context, u *ext.Update, session *onlineSubtitleSession, index int) error {
@@ -868,6 +927,24 @@ func firstStringValue(value any) string {
 		return firstStringValue(values[0])
 	}
 	return ""
+}
+
+func stringValues(value any) []string {
+	switch values := value.(type) {
+	case []any:
+		result := make([]string, 0, len(values))
+		for _, item := range values {
+			if text := firstStringValue(item); text != "" {
+				result = append(result, text)
+			}
+		}
+		return result
+	case string:
+		if text := strings.TrimSpace(values); text != "" {
+			return []string{text}
+		}
+	}
+	return nil
 }
 
 func intField(record map[string]any, keys ...string) int64 {
