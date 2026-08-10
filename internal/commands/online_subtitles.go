@@ -84,6 +84,8 @@ type subsourceSubtitle struct {
 	ID              string
 	Name            string
 	Language        string
+	Season          string
+	Episode         string
 	ReleaseInfo     string
 	Uploader        string
 	Rating          string
@@ -640,6 +642,8 @@ func normalizeSubsourceSubtitles(values []any, query mediaQuery) []subsourceSubt
 			ID:              stringField(record, "subtitleId", "id", "subId"),
 			Name:            stringField(record, "releaseName", "releaseInfo", "name", "title", "filename", "fileName"),
 			Language:        stringField(record, "lang", "language", "languageName"),
+			Season:          stringField(record, "season", "seasonNumber", "season_number"),
+			Episode:         stringField(record, "episode", "episodeNumber", "episode_number"),
 			ReleaseInfo:     firstStringValue(record["releaseInfo"]),
 			Uploader:        stringField(record, "uploader", "author", "owner"),
 			Rating:          stringField(record, "rating"),
@@ -660,15 +664,34 @@ func normalizeSubsourceSubtitles(values []any, query mediaQuery) []subsourceSubt
 }
 
 func onlineSubtitleMatchesEpisode(subtitle subsourceSubtitle, season, episode string) bool {
-	text := strings.ToLower(strings.Join(append([]string{subtitle.Name, subtitle.ReleaseInfo}, subtitle.Files...), " "))
-	if strings.Contains(text, "complete") || strings.Contains(text, "season") || len(subtitle.Files) > 1 {
-		return true
-	}
 	s, _ := strconv.Atoi(season)
 	e, _ := strconv.Atoi(episode)
-	patterns := []string{fmt.Sprintf("s%02de%02d", s, e), fmt.Sprintf("s%de%d", s, e), fmt.Sprintf("e%02d", e)}
+	if s <= 0 || e <= 0 {
+		return false
+	}
+	if subtitle.Season != "" || subtitle.Episode != "" {
+		actualSeason, _ := strconv.Atoi(subtitle.Season)
+		actualEpisode, _ := strconv.Atoi(subtitle.Episode)
+		if actualSeason > 0 && actualEpisode > 0 {
+			return actualSeason == s && actualEpisode == e
+		}
+	}
+	text := strings.Join(append([]string{subtitle.Name, subtitle.ReleaseInfo}, subtitle.Files...), " ")
+	return containsExactSeasonEpisode(text, s, e)
+}
+
+func containsExactSeasonEpisode(text string, season, episode int) bool {
+	normalized := strings.ToLower(strings.NewReplacer(".", "", "_", "", "-", "", " ", "").Replace(text))
+	patterns := []string{
+		fmt.Sprintf("s%02de%02d", season, episode),
+		fmt.Sprintf("s%de%02d", season, episode),
+		fmt.Sprintf("s%02de%d", season, episode),
+		fmt.Sprintf("s%de%d", season, episode),
+		fmt.Sprintf("%dx%02d", season, episode),
+		fmt.Sprintf("%dx%d", season, episode),
+	}
 	for _, pattern := range patterns {
-		if strings.Contains(strings.NewReplacer(".", "", "_", "", "-", "").Replace(text), pattern) {
+		if strings.Contains(normalized, pattern) {
 			return true
 		}
 	}
@@ -689,6 +712,7 @@ func downloadOnlineSubtitle(ctx *ext.Context, u *ext.Update, session *onlineSubt
 		return onlineFailure(ctx, u, "The online subtitle could not be saved.", err)
 	}
 	result.sourceFileName = session.SourceFileName
+	result.subtitleName = filepath.Base(path)
 	return sendSubtitleResult(ctx, u, result, session.LinkExpires)
 }
 
@@ -753,12 +777,17 @@ func extractBestSubtitleFile(data []byte, directory string, query mediaQuery) (s
 	}
 	selected := candidates[0]
 	if query.Episode != "" {
+		matched := false
 		for _, candidate := range candidates {
 			probe := subsourceSubtitle{Name: candidate.Name}
 			if onlineSubtitleMatchesEpisode(probe, query.Season, query.Episode) {
 				selected = candidate
+				matched = true
 				break
 			}
+		}
+		if !matched {
+			return "", fmt.Errorf("subtitle archive does not contain season %s episode %s", query.Season, query.Episode)
 		}
 	}
 	reader, err := selected.Open()

@@ -44,6 +44,7 @@ type subtitleResult struct {
 	messageID      int
 	file           *filetypes.File
 	sourceFileName string
+	subtitleName   string
 }
 
 type subtitleProbe struct {
@@ -445,8 +446,16 @@ func sendSubtitleResult(ctx *ext.Context, u *ext.Update, result subtitleResult, 
 		styling.Bold("Source Video"),
 		styling.Plain("\n"),
 		styling.Plain(result.sourceFileName),
-		styling.Plain("\n\n⏳ The link expires together with the original video link."),
 	}
+	if result.subtitleName != "" {
+		text = append(text,
+			styling.Plain("\n\n📄 "),
+			styling.Bold("Subtitle File"),
+			styling.Plain("\n"),
+			styling.Plain(result.subtitleName),
+		)
+	}
+	text = append(text, styling.Plain("\n\n⏳ The link expires together with the original video link."))
 	sendSubtitleStyledText(ctx, u, text, markup)
 	return dispatcher.EndGroups
 }

@@ -73,6 +73,28 @@ func TestSubsourceErrorMessageReadsJSONWithoutExposingRequest(t *testing.T) {
 	}
 }
 
+func TestOnlineSubtitleMatchRequiresCorrectSeasonAndEpisode(t *testing.T) {
+	wrongSeason := subsourceSubtitle{Name: "Example.Show.S01E07.1080p.srt"}
+	if onlineSubtitleMatchesEpisode(wrongSeason, "3", "7") {
+		t.Fatal("subtitle from season 1 must not match season 3 episode 7")
+	}
+	correct := subsourceSubtitle{Name: "Example.Show.S03E07.1080p.srt"}
+	if !onlineSubtitleMatchesEpisode(correct, "3", "7") {
+		t.Fatal("expected season 3 episode 7 to match")
+	}
+}
+
+func TestOnlineSubtitleMatchUsesStructuredEpisodeMetadata(t *testing.T) {
+	wrong := subsourceSubtitle{Name: "Episode 7", Season: "1", Episode: "7"}
+	if onlineSubtitleMatchesEpisode(wrong, "3", "7") {
+		t.Fatal("structured season metadata must reject the wrong season")
+	}
+	correct := subsourceSubtitle{Name: "Episode 7", Season: "3", Episode: "7"}
+	if !onlineSubtitleMatchesEpisode(correct, "3", "7") {
+		t.Fatal("structured season metadata should match")
+	}
+}
+
 func TestOnlineCallbackFitsTelegramLimit(t *testing.T) {
 	data := onlineCallback("abcdefghijkl", "dl", "2147483647")
 	if len(data) > 64 {
