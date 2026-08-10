@@ -41,8 +41,9 @@ var (
 )
 
 type subtitleResult struct {
-	messageID int
-	file      *filetypes.File
+	messageID      int
+	file           *filetypes.File
+	sourceFileName string
 }
 
 type subtitleProbe struct {
@@ -114,8 +115,10 @@ func handleSubtitleCallback(ctx *ext.Context, u *ext.Update) error {
 		return dispatcher.EndGroups
 	}
 	if !subtitleToolsAvailable {
-		answerSubtitleCallback(ctx, u, "Subtitle tools are not installed on the server.", true)
-		return dispatcher.EndGroups
+		if action != "d" {
+			answerSubtitleCallback(ctx, u, "Subtitle tools are not installed on the server.", true)
+			return dispatcher.EndGroups
+		}
 	}
 
 	switch action {
@@ -125,6 +128,9 @@ func handleSubtitleCallback(ctx *ext.Context, u *ext.Update) error {
 	case "x":
 		answerSubtitleCallback(ctx, u, "Preparing the selected subtitle…", false)
 		return prepareSubtitle(ctx, u, messageID, expires, trackIndex)
+	case "d":
+		answerSubtitleCallback(ctx, u, "Sending the SRT file…", false)
+		return sendSubtitleDocument(ctx, u, messageID)
 	default:
 		answerSubtitleCallback(ctx, u, "This subtitle action is invalid.", true)
 		return dispatcher.EndGroups
@@ -238,6 +244,7 @@ func prepareSubtitle(ctx *ext.Context, u *ext.Update, messageID int, expires int
 	if err != nil {
 		return subtitleFailure(ctx, u, "The extracted subtitle could not be saved.", err)
 	}
+	result.sourceFileName = file.FileName
 	subtitleCache.Lock()
 	subtitleCache.items[cacheKey] = result
 	subtitleCache.Unlock()
@@ -418,18 +425,48 @@ func sentMessageFromUpdates(updates tg.UpdatesClass) *tg.Message {
 func sendSubtitleResult(ctx *ext.Context, u *ext.Update, result subtitleResult, expires int64) error {
 	signature := utils.SignFile(result.file.FileName, result.file.FileSize, result.file.MimeType, result.file.ID, expires)
 	link := fmt.Sprintf("%s/stream/%d?signature=%s&expires=%d", config.ValueOf.Host, result.messageID, signature, expires)
-	markup := &tg.ReplyInlineMarkup{Rows: []tg.KeyboardButtonRow{{Buttons: []tg.KeyboardButtonClass{
-		&tg.KeyboardButtonURL{Text: "💬 Open subtitle", URL: link},
-		&tg.KeyboardButtonURL{Text: "⬇️ Download SRT", URL: link + "&d=true"},
-	}}}}
+	markup := &tg.ReplyInlineMarkup{Rows: []tg.KeyboardButtonRow{
+		{Buttons: []tg.KeyboardButtonClass{&tg.KeyboardButtonURL{Text: "💬 Open subtitle", URL: link}}},
+		{Buttons: []tg.KeyboardButtonClass{&tg.KeyboardButtonCallback{
+			Text: "⬇️ Download SRT",
+			Data: subtitleCallbackData("d", result.messageID, expires, -1),
+		}}},
+	}}
 	text := []styling.StyledTextOption{
-		styling.Plain("✅ Your subtitle is ready!\n\n🔗 "),
+		styling.Plain("💬 Your subtitle link is ready!\n\n🔗 "),
 		styling.Bold("Subtitle Link"),
 		styling.Plain(" (Tap to copy)\n"),
 		styling.Code(link),
+		styling.Plain("\n\n🎬 "),
+		styling.Bold("Source Video"),
+		styling.Plain("\n"),
+		styling.Plain(result.sourceFileName),
 		styling.Plain("\n\n⏳ The link expires together with the original video link."),
 	}
 	sendSubtitleStyledText(ctx, u, text, markup)
+	return dispatcher.EndGroups
+}
+
+func sendSubtitleDocument(ctx *ext.Context, u *ext.Update, messageID int) error {
+	fromChannel, err := utils.GetLogChannelPeer(ctx, ctx.Raw, ctx.PeerStorage)
+	if err != nil {
+		return subtitleFailure(ctx, u, "The subtitle file could not be found.", err)
+	}
+	toPeer := subtitlePeer(ctx, u)
+	if toPeer.Zero() {
+		return subtitleFailure(ctx, u, "The subtitle file could not be sent.", errors.New("callback peer is unavailable"))
+	}
+	_, err = ctx.Raw.MessagesForwardMessages(ctx, &tg.MessagesForwardMessagesRequest{
+		DropAuthor:        true,
+		DropMediaCaptions: true,
+		FromPeer:          &tg.InputPeerChannel{ChannelID: fromChannel.ChannelID, AccessHash: fromChannel.AccessHash},
+		ID:                []int{messageID},
+		RandomID:          []int64{rand.Int63()},
+		ToPeer:            toPeer,
+	})
+	if err != nil {
+		return subtitleFailure(ctx, u, "The subtitle file could not be sent.", err)
+	}
 	return dispatcher.EndGroups
 }
 

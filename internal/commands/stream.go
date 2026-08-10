@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 	_ "time/tzdata"
@@ -69,6 +70,17 @@ func displayLocation() *time.Location {
 	return location
 }
 
+func fileLinkPresentation(fileName, mimeType string) (string, string, string) {
+	extension := strings.ToLower(filepath.Ext(fileName))
+	if strings.Contains(strings.ToLower(mimeType), "video") || utils.Contains([]string{".mkv", ".mp4", ".webm", ".mov", ".avi", ".m4v", ".ts", ".m2ts"}, extension) {
+		return "🎬", "Your video link is ready!", "Video Link"
+	}
+	if utils.Contains([]string{".srt", ".vtt", ".ass", ".ssa", ".sub"}, extension) || strings.Contains(strings.ToLower(mimeType), "subrip") || strings.Contains(strings.ToLower(mimeType), "webvtt") {
+		return "💬", "Your subtitle link is ready!", "Subtitle Link"
+	}
+	return "📎", "Your file link is ready!", "File Link"
+}
+
 func sendLink(ctx *ext.Context, u *ext.Update) error {
 	chatId := u.EffectiveChat().GetID()
 	peerChatId := ctx.PeerStorage.GetPeerById(chatId)
@@ -133,12 +145,13 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 		expiresAt,
 	)
 	link := fmt.Sprintf("%s/stream/%d?signature=%s&expires=%d", config.ValueOf.Host, messageID, signature, expiresAt)
+	fileIcon, readyText, linkLabel := fileLinkPresentation(file.FileName, file.MimeType)
 	text := []styling.StyledTextOption{
-		styling.Plain("✅ Your link is ready!\n\n🔗 "),
-		styling.Bold("Direct Link"),
+		styling.Plain(fileIcon + " " + readyText + "\n\n🔗 "),
+		styling.Bold(linkLabel),
 		styling.Plain(" (Tap to copy)\n"),
 		styling.Code(link),
-		styling.Plain("\n\n📄 "),
+		styling.Plain("\n\n" + fileIcon + " "),
 		styling.Bold("File Name"),
 		styling.Plain("\n"),
 		styling.Plain(file.FileName),
@@ -160,7 +173,7 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 			},
 		},
 	}
-	if strings.Contains(file.MimeType, "video") || strings.Contains(file.MimeType, "audio") || strings.Contains(file.MimeType, "pdf") {
+	if fileIcon == "🎬" || strings.Contains(file.MimeType, "audio") || strings.Contains(file.MimeType, "pdf") {
 		row.Buttons = append(row.Buttons, &tg.KeyboardButtonURL{
 			Text: "Stream",
 			URL:  link,
@@ -169,7 +182,7 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 	markup := &tg.ReplyInlineMarkup{
 		Rows: []tg.KeyboardButtonRow{row},
 	}
-	if strings.Contains(file.MimeType, "video") && subtitlesAvailable() {
+	if fileIcon == "🎬" && subtitlesAvailable() {
 		markup.Rows = append(markup.Rows, tg.KeyboardButtonRow{Buttons: []tg.KeyboardButtonClass{
 			&tg.KeyboardButtonCallback{
 				Text: "💬 Subtitles",

@@ -18,3 +18,11 @@ func TestSubtitleCallbackFitsTelegramLimitAndRoundTrips(t *testing.T) {
 		t.Fatal("callback data did not round-trip")
 	}
 }
+
+func TestSubtitleDownloadCallbackFitsTelegramLimit(t *testing.T) {
+	config.ValueOf.LinkSigningKey = "test-only-signing-key-with-32-bytes"
+	data := subtitleCallbackData("d", math.MaxInt32, math.MaxInt64, -1)
+	if len(data) > 64 {
+		t.Fatalf("download callback data exceeds Telegram's 64-byte limit: %d", len(data))
+	}
+}
