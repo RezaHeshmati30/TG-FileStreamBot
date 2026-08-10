@@ -5,7 +5,8 @@ WORKDIR /app
 COPY . .
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -o /app/fsb -ldflags="-w -s" ./cmd/fsb
 
-FROM scratch
+FROM alpine:3.21
+RUN apk add --no-cache ca-certificates ffmpeg
 COPY --from=builder /app/fsb /app/fsb
 EXPOSE ${PORT}
 ENTRYPOINT ["/app/fsb", "run"]

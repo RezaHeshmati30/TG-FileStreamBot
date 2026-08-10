@@ -12,7 +12,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-w -s" \
     ./cmd/fsb
 
-FROM scratch
+FROM alpine:3.21
+RUN apk add --no-cache ca-certificates ffmpeg
 
 COPY --from=builder /app/fsb /app/fsb
 

@@ -169,6 +169,14 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 	markup := &tg.ReplyInlineMarkup{
 		Rows: []tg.KeyboardButtonRow{row},
 	}
+	if strings.Contains(file.MimeType, "video") {
+		markup.Rows = append(markup.Rows, tg.KeyboardButtonRow{Buttons: []tg.KeyboardButtonClass{
+			&tg.KeyboardButtonCallback{
+				Text: "💬 Subtitles",
+				Data: subtitleCallbackData("p", messageID, expiresAt, -1),
+			},
+		}})
+	}
 	if strings.Contains(link, "http://localhost") {
 		_, err = ctx.Reply(u, ext.ReplyTextStyledTextArray(text), &ext.ReplyOpts{
 			NoWebpage:        true,

@@ -38,28 +38,34 @@ func (au *allowedUsers) Decode(value string) error {
 }
 
 type config struct {
-	ApiID          int32        `envconfig:"API_ID" required:"true"`
-	ApiHash        string       `envconfig:"API_HASH" required:"true"`
-	BotToken       string       `envconfig:"BOT_TOKEN" required:"true"`
-	LogChannelID   int64        `envconfig:"LOG_CHANNEL" required:"true"`
-	AccessChannelID int64       `envconfig:"ACCESS_CHANNEL" required:"true"`
-	OwnerID        int64        `envconfig:"OWNER_ID" required:"true"`
-	Dev            bool         `envconfig:"DEV" default:"false"`
-	Port           int          `envconfig:"PORT" default:"8080"`
-	Host           string       `envconfig:"HOST" default:""`
-	LinkSigningKey string       `envconfig:"LINK_SIGNING_KEY" required:"true"`
-	UseSessionFile bool         `envconfig:"USE_SESSION_FILE" default:"true"`
-	UserSession    string       `envconfig:"USER_SESSION"`
-	UsePublicIP    bool         `envconfig:"USE_PUBLIC_IP" default:"false"`
-	AllowedUsers   allowedUsers `envconfig:"ALLOWED_USERS"`
-	Timezone       string       `envconfig:"TIMEZONE" default:"Europe/Berlin"`
-	MultiTokens    []string
+	ApiID           int32        `envconfig:"API_ID" required:"true"`
+	ApiHash         string       `envconfig:"API_HASH" required:"true"`
+	BotToken        string       `envconfig:"BOT_TOKEN" required:"true"`
+	LogChannelID    int64        `envconfig:"LOG_CHANNEL" required:"true"`
+	AccessChannelID int64        `envconfig:"ACCESS_CHANNEL" required:"true"`
+	OwnerID         int64        `envconfig:"OWNER_ID" required:"true"`
+	Dev             bool         `envconfig:"DEV" default:"false"`
+	Port            int          `envconfig:"PORT" default:"8080"`
+	Host            string       `envconfig:"HOST" default:""`
+	LinkSigningKey  string       `envconfig:"LINK_SIGNING_KEY" required:"true"`
+	UseSessionFile  bool         `envconfig:"USE_SESSION_FILE" default:"true"`
+	UserSession     string       `envconfig:"USER_SESSION"`
+	UsePublicIP     bool         `envconfig:"USE_PUBLIC_IP" default:"false"`
+	AllowedUsers    allowedUsers `envconfig:"ALLOWED_USERS"`
+	Timezone        string       `envconfig:"TIMEZONE" default:"Europe/Berlin"`
+	MultiTokens     []string
 
 	// stream specific config
 	StreamConcurrency int `envconfig:"STREAM_CONCURRENCY" default:"4"`
 	StreamBufferCount int `envconfig:"STREAM_BUFFER_COUNT" default:"8"`
 	StreamTimeoutSec  int `envconfig:"STREAM_TIMEOUT_SEC" default:"30"`
 	StreamMaxRetries  int `envconfig:"STREAM_MAX_RETRIES" default:"3"`
+
+	// subtitle extraction specific config
+	SubtitleConcurrency       int `envconfig:"SUBTITLE_CONCURRENCY" default:"1"`
+	SubtitleProbeTimeoutSec   int `envconfig:"SUBTITLE_PROBE_TIMEOUT_SEC" default:"60"`
+	SubtitleExtractTimeoutSec int `envconfig:"SUBTITLE_EXTRACT_TIMEOUT_SEC" default:"1800"`
+	SubtitleMaxOutputMB       int `envconfig:"SUBTITLE_MAX_OUTPUT_MB" default:"20"`
 }
 
 var botTokenRegex = regexp.MustCompile(`MULTI\_TOKEN\d+=(.*)`)
@@ -98,6 +104,10 @@ func SetFlagsFromConfig(cmd *cobra.Command) {
 	cmd.Flags().Int("stream-buffer-count", ValueOf.StreamBufferCount, "Number of blocks to prefetch")
 	cmd.Flags().Int("stream-timeout-sec", ValueOf.StreamTimeoutSec, "Maximum time to wait for a single block (in seconds)")
 	cmd.Flags().Int("stream-max-retries", ValueOf.StreamMaxRetries, "Number of retry attempts for failed fetches")
+	cmd.Flags().Int("subtitle-concurrency", ValueOf.SubtitleConcurrency, "Number of simultaneous subtitle extractions")
+	cmd.Flags().Int("subtitle-probe-timeout-sec", ValueOf.SubtitleProbeTimeoutSec, "Subtitle track probe timeout (seconds)")
+	cmd.Flags().Int("subtitle-extract-timeout-sec", ValueOf.SubtitleExtractTimeoutSec, "Subtitle extraction timeout (seconds)")
+	cmd.Flags().Int("subtitle-max-output-mb", ValueOf.SubtitleMaxOutputMB, "Maximum extracted subtitle size (MB)")
 }
 
 func (c *config) loadConfigFromArgs(log *zap.Logger, cmd *cobra.Command) {
@@ -170,6 +180,22 @@ func (c *config) loadConfigFromArgs(log *zap.Logger, cmd *cobra.Command) {
 	if streamMaxRetries != 0 {
 		os.Setenv("STREAM_MAX_RETRIES", strconv.Itoa(streamMaxRetries))
 	}
+	subtitleConcurrency, _ := cmd.Flags().GetInt("subtitle-concurrency")
+	if subtitleConcurrency != 0 {
+		os.Setenv("SUBTITLE_CONCURRENCY", strconv.Itoa(subtitleConcurrency))
+	}
+	subtitleProbeTimeoutSec, _ := cmd.Flags().GetInt("subtitle-probe-timeout-sec")
+	if subtitleProbeTimeoutSec != 0 {
+		os.Setenv("SUBTITLE_PROBE_TIMEOUT_SEC", strconv.Itoa(subtitleProbeTimeoutSec))
+	}
+	subtitleExtractTimeoutSec, _ := cmd.Flags().GetInt("subtitle-extract-timeout-sec")
+	if subtitleExtractTimeoutSec != 0 {
+		os.Setenv("SUBTITLE_EXTRACT_TIMEOUT_SEC", strconv.Itoa(subtitleExtractTimeoutSec))
+	}
+	subtitleMaxOutputMB, _ := cmd.Flags().GetInt("subtitle-max-output-mb")
+	if subtitleMaxOutputMB != 0 {
+		os.Setenv("SUBTITLE_MAX_OUTPUT_MB", strconv.Itoa(subtitleMaxOutputMB))
+	}
 }
 
 func (c *config) setupEnvVars(log *zap.Logger, cmd *cobra.Command) {
@@ -230,6 +256,18 @@ func Load(log *zap.Logger, cmd *cobra.Command) {
 	if ValueOf.StreamMaxRetries <= 0 {
 		log.Sugar().Info("STREAM_MAX_RETRIES must be greater than 0, defaulting to 3")
 		ValueOf.StreamMaxRetries = 3
+	}
+	if ValueOf.SubtitleConcurrency <= 0 {
+		ValueOf.SubtitleConcurrency = 1
+	}
+	if ValueOf.SubtitleProbeTimeoutSec <= 0 {
+		ValueOf.SubtitleProbeTimeoutSec = 60
+	}
+	if ValueOf.SubtitleExtractTimeoutSec <= 0 {
+		ValueOf.SubtitleExtractTimeoutSec = 1800
+	}
+	if ValueOf.SubtitleMaxOutputMB <= 0 {
+		ValueOf.SubtitleMaxOutputMB = 20
 	}
 }
 

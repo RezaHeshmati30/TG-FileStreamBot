@@ -3,8 +3,10 @@ package utils
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 
 	"EverythingSuckz/fsb/config"
 )
@@ -41,4 +43,14 @@ func CheckSignature(inputSignature string, expectedSignature string) bool {
 		return false
 	}
 	return hmac.Equal(input, expected)
+}
+
+// SignSubtitleAction creates a compact signature suitable for Telegram callback
+// data, which is limited to 64 bytes. The first 96 bits of HMAC-SHA256 still
+// provide ample protection against forged callback actions.
+func SignSubtitleAction(action string, messageID int, expires int64, trackIndex int) string {
+	payload := fmt.Sprintf("%s:%d:%d:%d", action, messageID, expires, trackIndex)
+	mac := hmac.New(sha256.New, []byte(config.ValueOf.LinkSigningKey))
+	_, _ = mac.Write([]byte(payload))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil)[:12])
 }
