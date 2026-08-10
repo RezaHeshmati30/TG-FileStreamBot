@@ -786,6 +786,7 @@ func downloadOnlineSubtitle(ctx *ext.Context, u *ext.Update, session *onlineSubt
 		return onlineFailure(ctx, u, "The online subtitle could not be saved.", err)
 	}
 	result.sourceFileName = session.SourceFileName
+	result.sourceMessageID = session.SourceMessageID
 	result.subtitleName = filepath.Base(path)
 	return sendSubtitleResult(ctx, u, result, session.LinkExpires)
 }

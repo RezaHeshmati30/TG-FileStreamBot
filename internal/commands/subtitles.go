@@ -41,10 +41,11 @@ var (
 )
 
 type subtitleResult struct {
-	messageID      int
-	file           *filetypes.File
-	sourceFileName string
-	subtitleName   string
+	messageID       int
+	file            *filetypes.File
+	sourceMessageID int
+	sourceFileName  string
+	subtitleName    string
 }
 
 type subtitleProbe struct {
@@ -250,6 +251,7 @@ func prepareSubtitle(ctx *ext.Context, u *ext.Update, messageID int, expires int
 		return subtitleFailure(ctx, u, "The extracted subtitle could not be saved.", err)
 	}
 	result.sourceFileName = file.FileName
+	result.sourceMessageID = messageID
 	subtitleCache.Lock()
 	subtitleCache.items[cacheKey] = result
 	subtitleCache.Unlock()
@@ -430,13 +432,27 @@ func sentMessageFromUpdates(updates tg.UpdatesClass) *tg.Message {
 func sendSubtitleResult(ctx *ext.Context, u *ext.Update, result subtitleResult, expires int64) error {
 	signature := utils.SignFile(result.file.FileName, result.file.FileSize, result.file.MimeType, result.file.ID, expires)
 	link := fmt.Sprintf("%s/stream/%d?signature=%s&expires=%d", config.ValueOf.Host, result.messageID, signature, expires)
-	markup := &tg.ReplyInlineMarkup{Rows: []tg.KeyboardButtonRow{
+	rows := []tg.KeyboardButtonRow{
 		{Buttons: []tg.KeyboardButtonClass{&tg.KeyboardButtonURL{Text: "💬 Open subtitle", URL: link}}},
 		{Buttons: []tg.KeyboardButtonClass{&tg.KeyboardButtonCallback{
 			Text: "⬇️ Download Subtitle",
 			Data: subtitleCallbackData("d", result.messageID, expires, -1),
 		}}},
-	}}
+	}
+	if result.sourceMessageID > 0 {
+		launchSignature := utils.SignWVCLaunch(result.sourceMessageID, result.messageID, expires)
+		launchQuery := url.Values{
+			"video":     {strconv.Itoa(result.sourceMessageID)},
+			"subtitle":  {strconv.Itoa(result.messageID)},
+			"expires":   {strconv.FormatInt(expires, 10)},
+			"signature": {launchSignature},
+		}
+		launchURL := fmt.Sprintf("%s/wvc?%s", strings.TrimRight(config.ValueOf.Host, "/"), launchQuery.Encode())
+		rows = append(rows, tg.KeyboardButtonRow{Buttons: []tg.KeyboardButtonClass{
+			&tg.KeyboardButtonURL{Text: "📺 Open Video + Subtitle in WVC", URL: launchURL},
+		}})
+	}
+	markup := &tg.ReplyInlineMarkup{Rows: rows}
 	text := []styling.StyledTextOption{
 		styling.Plain("💬 Your subtitle link is ready!\n\n🔗 "),
 		styling.Bold("Subtitle Link"),
