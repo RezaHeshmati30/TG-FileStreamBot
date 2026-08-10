@@ -460,15 +460,9 @@ func editOnlineView(ctx *ext.Context, u *ext.Update, text string, markup tg.Repl
 }
 
 func searchSubsourceMovies(ctx context.Context, query mediaQuery) ([]subsourceMovie, error) {
-	parameterSets := []url.Values{
-		{"searchType": {"title"}, "query": {query.Title}, "type": {query.Type}},
-		{"searchType": {"title"}, "title": {query.Title}, "type": {query.Type}},
-	}
+	parameterSets := subsourceMovieSearchQueries(query)
 	var lastErr error
 	for _, params := range parameterSets {
-		if query.Year != "" {
-			params.Set("year", query.Year)
-		}
 		var payload any
 		if err := subsourceJSON(ctx, "/movies/search", params, &payload); err != nil {
 			lastErr = err
@@ -479,44 +473,45 @@ func searchSubsourceMovies(ctx context.Context, query mediaQuery) ([]subsourceMo
 			return movies, nil
 		}
 	}
-	legacyMovies, legacyErr := searchLegacySubsourceMovies(ctx, query)
-	if len(legacyMovies) > 0 {
-		return rankSubsourceMovies(legacyMovies, query), nil
-	}
 	if lastErr != nil {
 		return nil, lastErr
 	}
-	return nil, legacyErr
+	return nil, nil
 }
 
-func searchLegacySubsourceMovies(ctx context.Context, query mediaQuery) ([]subsourceMovie, error) {
-	payload, err := json.Marshal(map[string]string{
-		"query": query.Title,
-		"langs": "english",
-		"type":  map[bool]string{true: "tvShow", false: "movie"}[query.Type == "series"],
-	})
-	if err != nil {
-		return nil, err
+func subsourceMovieSearchQueries(query mediaQuery) []url.Values {
+	withYear := url.Values{
+		"searchType": {"text"},
+		"q":          {query.Title},
+		"type":       {"all"},
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.subsource.net/api/searchMovie", bytes.NewReader(payload))
-	if err != nil {
-		return nil, err
+	queries := make([]url.Values, 0, 3)
+	if query.Year != "" {
+		withYear.Set("year", query.Year)
+		queries = append(queries, withYear)
+		withoutYear := cloneURLValues(withYear)
+		withoutYear.Del("year")
+		queries = append(queries, withoutYear)
+	} else {
+		queries = append(queries, withYear)
 	}
-	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("X-API-Key", config.ValueOf.SubsourceAPIKey)
-	response, err := onlineHTTPClient.Do(request)
-	if err != nil {
-		return nil, err
+
+	words := strings.Fields(query.Title)
+	if len(words) > 3 {
+		shortQuery := cloneURLValues(withYear)
+		shortQuery.Set("q", strings.Join(words[:3], " "))
+		shortQuery.Del("year")
+		queries = append(queries, shortQuery)
 	}
-	defer response.Body.Close()
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, fmt.Errorf("legacy Subsource search returned HTTP %d", response.StatusCode)
+	return queries
+}
+
+func cloneURLValues(values url.Values) url.Values {
+	clone := make(url.Values, len(values))
+	for key, entries := range values {
+		clone[key] = append([]string(nil), entries...)
 	}
-	var result any
-	if err := json.NewDecoder(io.LimitReader(response.Body, 4*1024*1024)).Decode(&result); err != nil {
-		return nil, err
-	}
-	return normalizeSubsourceMovies(pickSubsourceArray(result)), nil
+	return clone
 }
 
 func searchSubsourceSubtitles(ctx context.Context, movieID, language string, query mediaQuery) ([]subsourceSubtitle, error) {
@@ -550,10 +545,26 @@ func subsourceJSON(ctx context.Context, path string, params url.Values, target a
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
+		body, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
+		message := subsourceErrorMessage(body)
+		if message != "" {
+			return fmt.Errorf("Subsource returned HTTP %d: %s", response.StatusCode, utils.RedactSensitiveText(message))
+		}
 		return fmt.Errorf("Subsource returned HTTP %d", response.StatusCode)
 	}
 	return json.NewDecoder(io.LimitReader(response.Body, 4*1024*1024)).Decode(target)
+}
+
+func subsourceErrorMessage(body []byte) string {
+	var payload map[string]any
+	if json.Unmarshal(body, &payload) == nil {
+		for _, key := range []string{"message", "error", "detail"} {
+			if message := firstStringValue(payload[key]); message != "" {
+				return strings.TrimSpace(message)
+			}
+		}
+	}
+	return strings.TrimSpace(string(body))
 }
 
 func pickSubsourceArray(value any) []any {

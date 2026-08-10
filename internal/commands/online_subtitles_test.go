@@ -34,6 +34,45 @@ func TestRankSubsourceMoviesPrefersExactTitleAndYear(t *testing.T) {
 	}
 }
 
+func TestSubsourceMovieSearchQueriesUseCurrentAPIParameters(t *testing.T) {
+	queries := subsourceMovieSearchQueries(mediaQuery{Title: "Dune Part Two", Year: "2024", Type: "movie"})
+	if len(queries) != 2 {
+		t.Fatalf("expected query with and without year, got %d", len(queries))
+	}
+	if got := queries[0].Get("searchType"); got != "text" {
+		t.Fatalf("searchType: got %q, want text", got)
+	}
+	if got := queries[0].Get("q"); got != "Dune Part Two" {
+		t.Fatalf("q: got %q", got)
+	}
+	if got := queries[0].Get("type"); got != "all" {
+		t.Fatalf("type: got %q, want all", got)
+	}
+	if got := queries[0].Get("year"); got != "2024" {
+		t.Fatalf("year: got %q, want 2024", got)
+	}
+	if got := queries[1].Get("year"); got != "" {
+		t.Fatalf("fallback must omit year, got %q", got)
+	}
+}
+
+func TestSubsourceMovieSearchQueriesAddShortTitleFallback(t *testing.T) {
+	queries := subsourceMovieSearchQueries(mediaQuery{Title: "The Lord of the Rings Fellowship", Type: "movie"})
+	if len(queries) != 2 {
+		t.Fatalf("expected full and shortened query, got %d", len(queries))
+	}
+	if got := queries[1].Get("q"); got != "The Lord of" {
+		t.Fatalf("short query: got %q", got)
+	}
+}
+
+func TestSubsourceErrorMessageReadsJSONWithoutExposingRequest(t *testing.T) {
+	got := subsourceErrorMessage([]byte(`{"message":"Invalid search parameters"}`))
+	if got != "Invalid search parameters" {
+		t.Fatalf("unexpected error message: %q", got)
+	}
+}
+
 func TestOnlineCallbackFitsTelegramLimit(t *testing.T) {
 	data := onlineCallback("abcdefghijkl", "dl", "2147483647")
 	if len(data) > 64 {
