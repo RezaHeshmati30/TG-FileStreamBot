@@ -259,9 +259,13 @@ func parseMediaFileName(fileName string) mediaQuery {
 	name := strings.TrimSuffix(filepath.Base(fileName), filepath.Ext(fileName))
 	name = strings.NewReplacer(".", " ", "_", " ", "[", " ", "]", " ").Replace(name)
 	query := mediaQuery{Type: "movie"}
-	if match := episodePattern.FindStringSubmatch(name); len(match) == 3 {
-		query.Type, query.Season, query.Episode = "series", trimNumber(match[1]), trimNumber(match[2])
-		name = episodePattern.ReplaceAllString(name, " ")
+	if match := episodePattern.FindStringSubmatchIndex(name); len(match) == 6 {
+		query.Type = "series"
+		query.Season = trimNumber(name[match[2]:match[3]])
+		query.Episode = trimNumber(name[match[4]:match[5]])
+		// Everything after SxxExx may be an episode title or release metadata.
+		// Neither belongs to the series title used for the Subsource search.
+		name = name[:match[0]]
 	}
 	if match := yearPattern.FindStringSubmatch(name); len(match) == 2 {
 		query.Year = match[1]
@@ -488,7 +492,10 @@ func subsourceMovieSearchQueries(query mediaQuery) []url.Values {
 	withYear := url.Values{
 		"searchType": {"text"},
 		"q":          {query.Title},
-		"type":       {"all"},
+		"type":       {query.Type},
+	}
+	if query.Type == "series" && query.Season != "" {
+		withYear.Set("season", query.Season)
 	}
 	queries := make([]url.Values, 0, 3)
 	if query.Year != "" {
@@ -753,8 +760,16 @@ func seasonNumberFromText(text string) int {
 }
 
 func containsEpisodeOnly(text string, episode int) bool {
-	pattern := regexp.MustCompile(fmt.Sprintf(`(?i)\b(?:e|ep|episode)[ ._-]*0*%d\b`, episode))
-	return pattern.MatchString(text)
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile(fmt.Sprintf(`(?i)\b(?:e|ep|episode)[ ._-]*0*%d\b`, episode)),
+		regexp.MustCompile(fmt.Sprintf(`\b%02d\b`, episode)),
+	}
+	for _, pattern := range patterns {
+		if pattern.MatchString(text) {
+			return true
+		}
+	}
+	return false
 }
 
 func downloadOnlineSubtitle(ctx *ext.Context, u *ext.Update, session *onlineSubtitleSession, index int) error {

@@ -15,6 +15,9 @@ func TestParseMediaFileName(t *testing.T) {
 	}{
 		{"Dune.Part.Two.2024.2160p.WEB-DL.mkv", mediaQuery{Title: "Dune Part Two", Year: "2024", Type: "movie"}},
 		{"The.Last.of.Us.S02E04.1080p.WEB-DL.mkv", mediaQuery{Title: "The Last of Us", Type: "series", Season: "2", Episode: "4"}},
+		{"Series.Name.S03E07.The.Episode.Title.1080p.WEBRip.mkv", mediaQuery{Title: "Series Name", Type: "series", Season: "3", Episode: "7"}},
+		{"Silo.S03E06.2160p.HDR10Plus.DV.WEBRip.SoftSub.6CH.x265.H.mkv", mediaQuery{Title: "Silo", Type: "series", Season: "3", Episode: "6"}},
+		{"House.of.the.Dragon.S03E02.1080p.10bit.WEBRip.SoftSub.6C.mkv", mediaQuery{Title: "House of the Dragon", Type: "series", Season: "3", Episode: "2"}},
 	}
 	for _, test := range tests {
 		if got := parseMediaFileName(test.fileName); got != test.want {
@@ -45,14 +48,24 @@ func TestSubsourceMovieSearchQueriesUseCurrentAPIParameters(t *testing.T) {
 	if got := queries[0].Get("q"); got != "Dune Part Two" {
 		t.Fatalf("q: got %q", got)
 	}
-	if got := queries[0].Get("type"); got != "all" {
-		t.Fatalf("type: got %q, want all", got)
+	if got := queries[0].Get("type"); got != "movie" {
+		t.Fatalf("type: got %q, want movie", got)
 	}
 	if got := queries[0].Get("year"); got != "2024" {
 		t.Fatalf("year: got %q, want 2024", got)
 	}
 	if got := queries[1].Get("year"); got != "" {
 		t.Fatalf("fallback must omit year, got %q", got)
+	}
+}
+
+func TestSubsourceSeriesSearchIncludesTypeAndSeason(t *testing.T) {
+	queries := subsourceMovieSearchQueries(mediaQuery{Title: "Silo", Type: "series", Season: "3", Episode: "6"})
+	if got := queries[0].Get("type"); got != "series" {
+		t.Fatalf("type: got %q, want series", got)
+	}
+	if got := queries[0].Get("season"); got != "3" {
+		t.Fatalf("season: got %q, want 3", got)
 	}
 }
 
@@ -110,6 +123,13 @@ func TestOnlineSubtitleMatchAcceptsEpisodeOnlyAfterAPIFilter(t *testing.T) {
 	subtitle := subsourceSubtitle{Name: "Example Show Episode 7 WEB-DL"}
 	if !onlineSubtitleMatchesEpisode(subtitle, "3", "7") {
 		t.Fatal("episode-only API result should remain visible")
+	}
+}
+
+func TestOnlineSubtitleMatchAcceptsStandalonePaddedEpisode(t *testing.T) {
+	subtitle := subsourceSubtitle{Name: "Example Show WEB-DL 02"}
+	if !onlineSubtitleMatchesEpisode(subtitle, "3", "2") {
+		t.Fatal("standalone padded episode should match the season-scoped API result")
 	}
 }
 
