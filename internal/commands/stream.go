@@ -2,7 +2,9 @@ package commands
 
 import (
 	"fmt"
+	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 	_ "time/tzdata"
@@ -183,6 +185,12 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 		Rows: []tg.KeyboardButtonRow{row},
 	}
 	if fileIcon == "🎬" {
+		playerButtons := []tg.KeyboardButtonClass{
+			&tg.KeyboardButtonURL{Text: "📺 Open in WVC", URL: externalPlayerURL("wvc", messageID, expiresAt)},
+			&tg.KeyboardButtonURL{Text: "▶️ Open in VLC", URL: externalPlayerURL("vlc", messageID, expiresAt)},
+		}
+		markup.Rows = append(markup.Rows, tg.KeyboardButtonRow{Buttons: playerButtons})
+
 		var subtitleButtons []tg.KeyboardButtonClass
 		if subtitlesAvailable() {
 			subtitleButtons = append(subtitleButtons, &tg.KeyboardButtonCallback{Text: "💬 Embedded", Data: subtitleCallbackData("p", messageID, expiresAt, -1)})
@@ -211,4 +219,13 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 		ctx.Reply(u, ext.ReplyTextString(fmt.Sprintf("Error - %s", err.Error())), nil)
 	}
 	return dispatcher.EndGroups
+}
+
+func externalPlayerURL(player string, messageID int, expires int64) string {
+	query := url.Values{
+		"video":     {strconv.Itoa(messageID)},
+		"expires":   {strconv.FormatInt(expires, 10)},
+		"signature": {utils.SignPlayerLaunch(player, messageID, expires)},
+	}
+	return fmt.Sprintf("%s/player/%s?%s", strings.TrimRight(config.ValueOf.Host, "/"), player, query.Encode())
 }

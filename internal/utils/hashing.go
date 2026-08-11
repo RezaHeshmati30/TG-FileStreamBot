@@ -64,3 +64,12 @@ func SignWVCLaunch(videoMessageID, subtitleMessageID int, expires int64) string 
 	_, _ = mac.Write([]byte(payload))
 	return hex.EncodeToString(mac.Sum(nil)[:18])
 }
+
+// SignPlayerLaunch binds a video-only external player launch to the selected
+// app, Telegram message and expiration time.
+func SignPlayerLaunch(player string, videoMessageID int, expires int64) string {
+	payload := fmt.Sprintf("player:%s:%d:%d", player, videoMessageID, expires)
+	mac := hmac.New(sha256.New, []byte(config.ValueOf.LinkSigningKey))
+	_, _ = mac.Write([]byte(payload))
+	return hex.EncodeToString(mac.Sum(nil)[:18])
+}
