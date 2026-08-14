@@ -57,10 +57,12 @@ type config struct {
 	MultiTokens     []string
 
 	// stream specific config
-	StreamConcurrency int `envconfig:"STREAM_CONCURRENCY" default:"4"`
-	StreamBufferCount int `envconfig:"STREAM_BUFFER_COUNT" default:"8"`
-	StreamTimeoutSec  int `envconfig:"STREAM_TIMEOUT_SEC" default:"30"`
-	StreamMaxRetries  int `envconfig:"STREAM_MAX_RETRIES" default:"3"`
+	StreamConcurrency     int `envconfig:"STREAM_CONCURRENCY" default:"4"`
+	StreamBufferCount     int `envconfig:"STREAM_BUFFER_COUNT" default:"8"`
+	StreamTimeoutSec      int `envconfig:"STREAM_TIMEOUT_SEC" default:"30"`
+	StreamMaxRetries      int `envconfig:"STREAM_MAX_RETRIES" default:"3"`
+	ProxyConcurrency      int `envconfig:"PROXY_CONCURRENCY" default:"2"`
+	ProxyHeaderTimeoutSec int `envconfig:"PROXY_HEADER_TIMEOUT_SEC" default:"20"`
 
 	// subtitle extraction specific config
 	SubtitleConcurrency       int `envconfig:"SUBTITLE_CONCURRENCY" default:"1"`
@@ -105,6 +107,8 @@ func SetFlagsFromConfig(cmd *cobra.Command) {
 	cmd.Flags().Int("stream-buffer-count", ValueOf.StreamBufferCount, "Number of blocks to prefetch")
 	cmd.Flags().Int("stream-timeout-sec", ValueOf.StreamTimeoutSec, "Maximum time to wait for a single block (in seconds)")
 	cmd.Flags().Int("stream-max-retries", ValueOf.StreamMaxRetries, "Number of retry attempts for failed fetches")
+	cmd.Flags().Int("proxy-concurrency", ValueOf.ProxyConcurrency, "Maximum simultaneous external proxy streams")
+	cmd.Flags().Int("proxy-header-timeout-sec", ValueOf.ProxyHeaderTimeoutSec, "External proxy response-header timeout (seconds)")
 	cmd.Flags().Int("subtitle-concurrency", ValueOf.SubtitleConcurrency, "Number of simultaneous subtitle extractions")
 	cmd.Flags().Int("subtitle-probe-timeout-sec", ValueOf.SubtitleProbeTimeoutSec, "Subtitle track probe timeout (seconds)")
 	cmd.Flags().Int("subtitle-extract-timeout-sec", ValueOf.SubtitleExtractTimeoutSec, "Subtitle extraction timeout (seconds)")
@@ -180,6 +184,14 @@ func (c *config) loadConfigFromArgs(log *zap.Logger, cmd *cobra.Command) {
 	streamMaxRetries, _ := cmd.Flags().GetInt("stream-max-retries")
 	if streamMaxRetries != 0 {
 		os.Setenv("STREAM_MAX_RETRIES", strconv.Itoa(streamMaxRetries))
+	}
+	proxyConcurrency, _ := cmd.Flags().GetInt("proxy-concurrency")
+	if proxyConcurrency != 0 {
+		os.Setenv("PROXY_CONCURRENCY", strconv.Itoa(proxyConcurrency))
+	}
+	proxyHeaderTimeoutSec, _ := cmd.Flags().GetInt("proxy-header-timeout-sec")
+	if proxyHeaderTimeoutSec != 0 {
+		os.Setenv("PROXY_HEADER_TIMEOUT_SEC", strconv.Itoa(proxyHeaderTimeoutSec))
 	}
 	subtitleConcurrency, _ := cmd.Flags().GetInt("subtitle-concurrency")
 	if subtitleConcurrency != 0 {
@@ -257,6 +269,12 @@ func Load(log *zap.Logger, cmd *cobra.Command) {
 	if ValueOf.StreamMaxRetries <= 0 {
 		log.Sugar().Info("STREAM_MAX_RETRIES must be greater than 0, defaulting to 3")
 		ValueOf.StreamMaxRetries = 3
+	}
+	if ValueOf.ProxyConcurrency <= 0 {
+		ValueOf.ProxyConcurrency = 2
+	}
+	if ValueOf.ProxyHeaderTimeoutSec <= 0 {
+		ValueOf.ProxyHeaderTimeoutSec = 20
 	}
 	if ValueOf.SubtitleConcurrency <= 0 {
 		ValueOf.SubtitleConcurrency = 1

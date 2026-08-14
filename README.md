@@ -38,6 +38,8 @@ acknowledged in [License and attribution](#license-and-attribution).
   supported files.
 - Supports HTTP range requests for seeking and efficient video playback.
 - Provides separate **Download** and **Stream** actions.
+- Converts authorized external HTTP(S) URLs into encrypted 24-hour secure proxy
+  links with browser, WVC, and VLC actions.
 - Displays the filename, file size, creation time, and expiration time in a
   structured Telegram message.
 - Uses configurable local-time display through an IANA timezone.
@@ -195,6 +197,8 @@ Keep credentials in secrets or environment variables. Never commit a populated
 | `STREAM_BUFFER_COUNT` | `8` | Number of prefetched stream chunks |
 | `STREAM_TIMEOUT_SEC` | `30` | Per-chunk timeout in seconds |
 | `STREAM_MAX_RETRIES` | `3` | Retry count for failed chunks |
+| `PROXY_CONCURRENCY` | `2` | Simultaneous external secure-proxy streams |
+| `PROXY_HEADER_TIMEOUT_SEC` | `20` | Upstream response-header timeout in seconds |
 | `SUBTITLE_CONCURRENCY` | `1` | Simultaneous subtitle extractions |
 | `SUBTITLE_PROBE_TIMEOUT_SEC` | `60` | FFprobe timeout in seconds |
 | `SUBTITLE_EXTRACT_TIMEOUT_SEC` | `1800` | FFmpeg extraction timeout in seconds |

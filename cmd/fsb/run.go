@@ -9,6 +9,7 @@ import (
 	"EverythingSuckz/fsb/internal/utils"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -86,10 +87,16 @@ func safeRequestLogger(log *zap.Logger) gin.HandlerFunc {
 			log.Error("HTTP handler error", zap.String("error", requestError.Error()))
 		}
 
+		path := ctx.Request.URL.Path
+		if strings.HasPrefix(path, "/proxy/") {
+			path = "/proxy/[REDACTED]"
+		} else if strings.HasPrefix(path, "/proxy-player/") {
+			path = "/proxy-player/[REDACTED]"
+		}
 		log.Info(
 			"HTTP request",
 			zap.String("method", ctx.Request.Method),
-			zap.String("path", ctx.Request.URL.Path),
+			zap.String("path", path),
 			zap.Int("status", ctx.Writer.Status()),
 			zap.Duration("latency", time.Since(startedAt)),
 		)
