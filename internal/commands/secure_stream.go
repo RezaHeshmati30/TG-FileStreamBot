@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"EverythingSuckz/fsb/config"
 	"EverythingSuckz/fsb/internal/secureproxy"
@@ -19,6 +20,8 @@ import (
 )
 
 var externalURLPattern = regexp.MustCompile(`(?i)https?://[^\s<>"']+`)
+
+const telegramCopyTextLimit = 256
 
 func (m *command) LoadSecureStream(dispatcher dispatcher.Dispatcher) {
 	dispatcher.AddHandler(handlers.NewMessage(nil, handleSecureStreamURL))
@@ -56,7 +59,7 @@ func handleSecureStreamURL(ctx *ext.Context, update *ext.Update) error {
 		return dispatcher.EndGroups
 	}
 	proxyURL := secureProxyURL(token)
-	markup := &tg.ReplyInlineMarkup{Rows: []tg.KeyboardButtonRow{
+	markupRows := []tg.KeyboardButtonRow{
 		{Buttons: []tg.KeyboardButtonClass{
 			&tg.KeyboardButtonURL{Text: "▶️ Open Stream", URL: proxyURL},
 			&tg.KeyboardButtonURL{Text: "⬇️ Download", URL: proxyURL + "?d=true"},
@@ -65,10 +68,16 @@ func handleSecureStreamURL(ctx *ext.Context, update *ext.Update) error {
 			&tg.KeyboardButtonURL{Text: "📺 Open in WVC", URL: secureProxyPlayerURL("wvc", token)},
 			&tg.KeyboardButtonURL{Text: "▶️ Open in VLC", URL: secureProxyPlayerURL("vlc", token)},
 		}},
-		{Buttons: []tg.KeyboardButtonClass{
+	}
+	// Telegram accepts at most 256 characters in KeyboardButtonCopy.CopyText.
+	// Encrypted proxy URLs can exceed that limit when the source URL is long;
+	// the code-formatted link in the message remains tap-to-copy in that case.
+	if utf8.RuneCountInString(proxyURL) <= telegramCopyTextLimit {
+		markupRows = append(markupRows, tg.KeyboardButtonRow{Buttons: []tg.KeyboardButtonClass{
 			&tg.KeyboardButtonCopy{Text: "📋 Copy secure link", CopyText: proxyURL},
-		}},
-	}}
+		}})
+	}
+	markup := &tg.ReplyInlineMarkup{Rows: markupRows}
 	expiresDisplay := time.Unix(expires, 0).In(displayLocation()).Format("02 Jan 2006, 15:04 MST")
 	text := []styling.StyledTextOption{
 		styling.Plain("🌐 Your secure stream link is ready!\n\n🔗 "),
