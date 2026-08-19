@@ -201,6 +201,12 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 		if len(subtitleButtons) > 0 {
 			markup.Rows = append(markup.Rows, tg.KeyboardButtonRow{Buttons: subtitleButtons})
 		}
+		media := parseMediaFileName(file.FileName)
+		if seriesProgressAvailable() && media.Type == "series" {
+			markup.Rows = append(markup.Rows, tg.KeyboardButtonRow{Buttons: []tg.KeyboardButtonClass{
+				&tg.KeyboardButtonCallback{Text: "✅ Mark episode watched", Data: seriesProgressStartCallback(messageID, expiresAt)},
+			}})
+		}
 	}
 	if strings.Contains(link, "http://localhost") {
 		_, err = ctx.Reply(u, ext.ReplyTextStyledTextArray(text), &ext.ReplyOpts{

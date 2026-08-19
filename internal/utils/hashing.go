@@ -55,6 +55,15 @@ func SignSubtitleAction(action string, messageID int, expires int64, trackIndex 
 	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil)[:12])
 }
 
+// SignSeriesProgressAction protects the source Telegram message and expiry in
+// the compact callback that starts an episode-progress interaction.
+func SignSeriesProgressAction(messageID int, expires int64) string {
+	payload := fmt.Sprintf("series-progress:%d:%d", messageID, expires)
+	mac := hmac.New(sha256.New, []byte(config.ValueOf.LinkSigningKey))
+	_, _ = mac.Write([]byte(payload))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil)[:12])
+}
+
 // SignWVCLaunch binds a Web Video Caster launch link to one video, one
 // subtitle and their shared expiration time. The file signatures themselves
 // are generated only after this signature has been verified by the route.

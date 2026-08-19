@@ -38,23 +38,25 @@ func (au *allowedUsers) Decode(value string) error {
 }
 
 type config struct {
-	ApiID           int32        `envconfig:"API_ID" required:"true"`
-	ApiHash         string       `envconfig:"API_HASH" required:"true"`
-	BotToken        string       `envconfig:"BOT_TOKEN" required:"true"`
-	LogChannelID    int64        `envconfig:"LOG_CHANNEL" required:"true"`
-	AccessChannelID int64        `envconfig:"ACCESS_CHANNEL" required:"true"`
-	OwnerID         int64        `envconfig:"OWNER_ID" required:"true"`
-	Dev             bool         `envconfig:"DEV" default:"false"`
-	Port            int          `envconfig:"PORT" default:"8080"`
-	Host            string       `envconfig:"HOST" default:""`
-	LinkSigningKey  string       `envconfig:"LINK_SIGNING_KEY" required:"true"`
-	SubsourceAPIKey string       `envconfig:"SUBSOURCE_API_KEY"`
-	UseSessionFile  bool         `envconfig:"USE_SESSION_FILE" default:"true"`
-	UserSession     string       `envconfig:"USER_SESSION"`
-	UsePublicIP     bool         `envconfig:"USE_PUBLIC_IP" default:"false"`
-	AllowedUsers    allowedUsers `envconfig:"ALLOWED_USERS"`
-	Timezone        string       `envconfig:"TIMEZONE" default:"Europe/Berlin"`
-	MultiTokens     []string
+	ApiID                int32        `envconfig:"API_ID" required:"true"`
+	ApiHash              string       `envconfig:"API_HASH" required:"true"`
+	BotToken             string       `envconfig:"BOT_TOKEN" required:"true"`
+	LogChannelID         int64        `envconfig:"LOG_CHANNEL" required:"true"`
+	AccessChannelID      int64        `envconfig:"ACCESS_CHANNEL" required:"true"`
+	OwnerID              int64        `envconfig:"OWNER_ID" required:"true"`
+	Dev                  bool         `envconfig:"DEV" default:"false"`
+	Port                 int          `envconfig:"PORT" default:"8080"`
+	Host                 string       `envconfig:"HOST" default:""`
+	LinkSigningKey       string       `envconfig:"LINK_SIGNING_KEY" required:"true"`
+	SubsourceAPIKey      string       `envconfig:"SUBSOURCE_API_KEY"`
+	SeriesProgressAPIURL string       `envconfig:"SERIES_PROGRESS_API_URL"`
+	SeriesProgressAPIKey string       `envconfig:"SERIES_PROGRESS_API_KEY"`
+	UseSessionFile       bool         `envconfig:"USE_SESSION_FILE" default:"true"`
+	UserSession          string       `envconfig:"USER_SESSION"`
+	UsePublicIP          bool         `envconfig:"USE_PUBLIC_IP" default:"false"`
+	AllowedUsers         allowedUsers `envconfig:"ALLOWED_USERS"`
+	Timezone             string       `envconfig:"TIMEZONE" default:"Europe/Berlin"`
+	MultiTokens          []string
 
 	// stream specific config
 	StreamConcurrency     int `envconfig:"STREAM_CONCURRENCY" default:"4"`

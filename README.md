@@ -186,6 +186,8 @@ Keep credentials in secrets or environment variables. Never commit a populated
 | Variable | Default | Description |
 | --- | ---: | --- |
 | `SUBSOURCE_API_KEY` | — | Enables online subtitle search |
+| `SERIES_PROGRESS_API_URL` | — | CineRate Pro `/api/series-progress` endpoint |
+| `SERIES_PROGRESS_API_KEY` | — | Shared server-only key for watched-episode progress |
 | `TIMEZONE` | `Europe/Berlin` | IANA timezone used in bot messages |
 | `PORT` | `8080` | HTTP server port |
 | `DEV` | `false` | Enables development mode |
@@ -262,7 +264,7 @@ foundation and adds or substantially expands:
 
 ## Security notes
 
-- Treat `BOT_TOKEN`, `API_HASH`, `USER_SESSION`, `SUBSOURCE_API_KEY`, and
+- Treat `BOT_TOKEN`, `API_HASH`, `USER_SESSION`, `SUBSOURCE_API_KEY`, `SERIES_PROGRESS_API_KEY`, and
   `LINK_SIGNING_KEY` as secrets.
 - Keep both Telegram channels private.
 - Do not expose a development server directly to the internet.
