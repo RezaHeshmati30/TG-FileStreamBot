@@ -26,3 +26,17 @@ func TestSubtitleDownloadCallbackFitsTelegramLimit(t *testing.T) {
 		t.Fatalf("download callback data exceeds Telegram's 64-byte limit: %d", len(data))
 	}
 }
+
+func TestSubtitleMIMETypeUsesActualFormat(t *testing.T) {
+	tests := map[string]string{
+		"subtitle.srt": "application/x-subrip",
+		"subtitle.vtt": "text/vtt",
+		"subtitle.ass": "text/x-ssa",
+		"subtitle.ssa": "text/x-ssa",
+	}
+	for path, expected := range tests {
+		if got := subtitleMIMEType(path); got != expected {
+			t.Errorf("%s: expected %q, got %q", path, expected, got)
+		}
+	}
+}

@@ -2,7 +2,11 @@ package routes
 
 import (
 	"net/url"
+	"strings"
 	"testing"
+
+	"EverythingSuckz/fsb/config"
+	"EverythingSuckz/fsb/internal/types"
 )
 
 func TestBuildWVCDeepLinkEncodesVideoAndSubtitleSeparately(t *testing.T) {
@@ -28,5 +32,24 @@ func TestBuildWVCDeepLinkEncodesVideoAndSubtitleSeparately(t *testing.T) {
 	}
 	if got := parsed.Query().Get("autostart"); got != "true" {
 		t.Fatalf("autostart: got %q", got)
+	}
+}
+
+func TestPublicSubtitleURLIncludesSubtitleFilename(t *testing.T) {
+	oldHost := config.ValueOf.Host
+	config.ValueOf.Host = "https://example.com"
+	t.Cleanup(func() { config.ValueOf.Host = oldHost })
+
+	file := &types.File{FileName: "Example German subtitle.srt", FileSize: 123, MimeType: "application/x-subrip", ID: 99}
+	result := publicSubtitleURL(file, 20, 123456)
+	parsed, err := url.Parse(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(parsed.Path, "/Example German subtitle.srt") {
+		t.Fatalf("subtitle filename missing from URL path: %s", result)
+	}
+	if parsed.Query().Get("signature") == "" || parsed.Query().Get("expires") != "123456" {
+		t.Fatalf("signed subtitle query is incomplete: %s", result)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -96,7 +97,7 @@ func getWVCLaunchRoute(ctx *gin.Context) {
 	}
 
 	videoURL := publicStreamURL(video, videoMessageID, expires)
-	subtitleURL := publicStreamURL(subtitle, subtitleMessageID, expires)
+	subtitleURL := publicSubtitleURL(subtitle, subtitleMessageID, expires)
 	deepLink := buildWVCDeepLink(videoURL, subtitleURL, video.FileName)
 
 	ctx.Header("Cache-Control", "no-store")
@@ -107,6 +108,19 @@ func getWVCLaunchRoute(ctx *gin.Context) {
 	if err := wvcPage.Execute(ctx.Writer, wvcPageData{DeepLink: deepLink, Title: video.FileName}); err != nil {
 		log.Error("Failed to render WVC launch page", zap.Error(err))
 	}
+}
+
+func publicSubtitleURL(file *types.File, messageID int, expires int64) string {
+	signature := utils.SignFile(file.FileName, file.FileSize, file.MimeType, file.ID, expires)
+	query := url.Values{
+		"signature": {signature},
+		"expires":   {strconv.FormatInt(expires, 10)},
+	}
+	fileName := filepath.Base(strings.TrimSpace(file.FileName))
+	if fileName == "" || fileName == "." {
+		fileName = "subtitle.srt"
+	}
+	return fmt.Sprintf("%s/subtitle/%d/%s?%s", strings.TrimRight(config.ValueOf.Host, "/"), messageID, url.PathEscape(fileName), query.Encode())
 }
 
 func publicStreamURL(file *types.File, messageID int, expires int64) string {

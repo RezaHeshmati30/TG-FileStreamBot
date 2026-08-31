@@ -7,8 +7,11 @@ import (
 	"EverythingSuckz/fsb/internal/utils"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gotd/td/tg"
@@ -24,6 +27,11 @@ func (e *allRoutes) LoadHome(r *Route) {
 	log = e.log.Named("Stream")
 	defer log.Info("Loaded stream route")
 	r.Engine.GET("/stream/:messageID", getStreamRoute)
+	r.Engine.HEAD("/stream/:messageID", getStreamRoute)
+	// A filename in the URL lets external players identify subtitle formats
+	// even before they have downloaded the response headers or body.
+	r.Engine.GET("/subtitle/:messageID/:filename", getStreamRoute)
+	r.Engine.HEAD("/subtitle/:messageID/:filename", getStreamRoute)
 }
 
 func getStreamRoute(ctx *gin.Context) {
@@ -104,11 +112,11 @@ func getStreamRoute(ctx *gin.Context) {
 	ctx.Header("Accept-Ranges", "bytes")
 	var start, end int64
 	rangeHeader := r.Header.Get("Range")
+	status := http.StatusOK
 
 	if rangeHeader == "" {
 		start = 0
 		end = file.FileSize - 1
-		w.WriteHeader(http.StatusOK)
 	} else {
 		ranges, err := range_parser.Parse(file.FileSize, r.Header.Get("Range"))
 		if err != nil {
@@ -119,15 +127,11 @@ func getStreamRoute(ctx *gin.Context) {
 		end = ranges[0].End
 		ctx.Header("Content-Range", fmt.Sprintf("bytes %d-%d/%d", start, end, file.FileSize))
 		log.Info("Content-Range", zap.Int64("start", start), zap.Int64("end", end), zap.Int64("fileSize", file.FileSize))
-		w.WriteHeader(http.StatusPartialContent)
+		status = http.StatusPartialContent
 	}
 
 	contentLength := end - start + 1
-	mimeType := file.MimeType
-
-	if mimeType == "" {
-		mimeType = "application/octet-stream"
-	}
+	mimeType := streamResponseMIMEType(file.FileName, file.MimeType, ctx.FullPath())
 
 	ctx.Header("Content-Type", mimeType)
 	ctx.Header("Content-Length", strconv.FormatInt(contentLength, 10))
@@ -138,7 +142,10 @@ func getStreamRoute(ctx *gin.Context) {
 		disposition = "attachment"
 	}
 
-	ctx.Header("Content-Disposition", fmt.Sprintf("%s; filename=\"%s\"", disposition, file.FileName))
+	ctx.Header("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": file.FileName}))
+	// Headers must be complete before WriteHeader. Otherwise net/http commits a
+	// response without the MIME type and filename that players use to detect SRT.
+	w.WriteHeader(status)
 
 	if r.Method != "HEAD" {
 		pipe, err := stream.NewStreamPipe(ctx, worker.Client, file.Location, start, end, log)
@@ -153,4 +160,21 @@ func getStreamRoute(ctx *gin.Context) {
 			}
 		}
 	}
+}
+
+func streamResponseMIMEType(fileName, storedMIMEType, routePattern string) string {
+	if strings.HasPrefix(routePattern, "/subtitle/") {
+		switch strings.ToLower(filepath.Ext(fileName)) {
+		case ".srt":
+			return "application/x-subrip; charset=utf-8"
+		case ".vtt":
+			return "text/vtt; charset=utf-8"
+		case ".ass", ".ssa":
+			return "text/x-ssa; charset=utf-8"
+		}
+	}
+	if strings.TrimSpace(storedMIMEType) != "" {
+		return storedMIMEType
+	}
+	return "application/octet-stream"
 }

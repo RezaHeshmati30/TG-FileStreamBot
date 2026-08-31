@@ -385,7 +385,7 @@ func uploadSubtitle(ctx *ext.Context, path string) (subtitleResult, error) {
 		Media: &tg.InputMediaUploadedDocument{
 			ForceFile: true,
 			File:      inputFile,
-			MimeType:  "application/x-subrip",
+			MimeType:  subtitleMIMEType(path),
 			Attributes: []tg.DocumentAttributeClass{
 				&tg.DocumentAttributeFilename{FileName: filepath.Base(path)},
 			},
@@ -405,6 +405,19 @@ func uploadSubtitle(ctx *ext.Context, path string) (subtitleResult, error) {
 		return subtitleResult{}, err
 	}
 	return subtitleResult{messageID: message.ID, file: file}, nil
+}
+
+func subtitleMIMEType(path string) string {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".srt":
+		return "application/x-subrip"
+	case ".vtt":
+		return "text/vtt"
+	case ".ass", ".ssa":
+		return "text/x-ssa"
+	default:
+		return "text/plain"
+	}
 }
 
 func sentMessageFromUpdates(updates tg.UpdatesClass) *tg.Message {
