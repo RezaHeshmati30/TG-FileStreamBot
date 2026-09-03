@@ -12,7 +12,11 @@ import (
 func TestBuildWVCDeepLinkEncodesVideoAndSubtitleSeparately(t *testing.T) {
 	video := "https://example.com/stream/10?signature=video&expires=123"
 	subtitle := "https://example.com/stream/20?signature=subtitle&expires=123"
-	deepLink := buildWVCDeepLink(video, subtitle, "Example S03E07.mkv")
+	deepLink := buildWVCDeepLink(video, subtitle, wvcMediaMetadata{
+		Title:    "Example · S03E07",
+		Poster:   "https://image.tmdb.org/t/p/w500/example.jpg",
+		MIMEType: "video/mp4",
+	})
 
 	parsed, err := url.Parse(deepLink)
 	if err != nil {
@@ -27,11 +31,20 @@ func TestBuildWVCDeepLinkEncodesVideoAndSubtitleSeparately(t *testing.T) {
 	if got := parsed.Query().Get("subtitle"); got != subtitle {
 		t.Fatalf("subtitle URL changed after encoding: %q", got)
 	}
-	if got := parsed.Query().Get("title"); got != "Example S03E07.mkv" {
+	if got := parsed.Query().Get("title"); got != "Example · S03E07" {
 		t.Fatalf("title changed after encoding: %q", got)
 	}
 	if got := parsed.Query().Get("autostart"); got != "true" {
 		t.Fatalf("autostart: got %q", got)
+	}
+	if got := parsed.Query().Get("poster"); got != "https://image.tmdb.org/t/p/w500/example.jpg" {
+		t.Fatalf("poster: got %q", got)
+	}
+	if got := parsed.Query().Get("mime_type"); got != "video/mp4" {
+		t.Fatalf("MIME type: got %q", got)
+	}
+	if got := parsed.Query().Get("secure_uri"); got != "true" {
+		t.Fatalf("secure URI: got %q", got)
 	}
 }
 

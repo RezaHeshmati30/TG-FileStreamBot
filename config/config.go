@@ -48,6 +48,7 @@ type config struct {
 	Port                 int          `envconfig:"PORT" default:"8080"`
 	Host                 string       `envconfig:"HOST" default:""`
 	LinkSigningKey       string       `envconfig:"LINK_SIGNING_KEY" required:"true"`
+	TMDbAPIKey           string       `envconfig:"TMDB_API_KEY"`
 	SubsourceAPIKey      string       `envconfig:"SUBSOURCE_API_KEY"`
 	SeriesProgressAPIURL string       `envconfig:"SERIES_PROGRESS_API_URL"`
 	SeriesProgressAPIKey string       `envconfig:"SERIES_PROGRESS_API_KEY"`

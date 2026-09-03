@@ -88,6 +88,8 @@ acknowledged in [License and attribution](#license-and-attribution).
 - Opens a video without subtitles directly in **Web Video Caster**.
 - Opens a video without subtitles directly in **VLC for iOS**.
 - Opens a video together with a selected subtitle in **Web Video Caster**.
+- Sends a clean title, video MIME type, protected source URI, and—when a TMDb
+  API key is configured—the canonical title and poster to Web Video Caster.
 - Uses short signed HTTPS launch pages so Telegram never needs to open custom app
   schemes directly.
 - Provides a manual app-launch button if automatic opening is blocked by the
@@ -188,6 +190,7 @@ Keep credentials in secrets or environment variables. Never commit a populated
 
 | Variable | Default | Description |
 | --- | ---: | --- |
+| `TMDB_API_KEY` | — | Enriches WVC launches with canonical titles and posters; local filename metadata remains available without it |
 | `SUBSOURCE_API_KEY` | — | Enables online subtitle search |
 | `SERIES_PROGRESS_API_URL` | — | CineRate Pro `/api/series-progress` endpoint |
 | `SERIES_PROGRESS_API_KEY` | — | Shared server-only key for watched-episode progress |
@@ -210,6 +213,9 @@ Keep credentials in secrets or environment variables. Never commit a populated
 | `SUBTITLE_MAX_OUTPUT_MB` | `20` | Maximum extracted subtitle size |
 
 See [`fsb.sample.env`](fsb.sample.env) for a complete example.
+
+WVC metadata enrichment uses the TMDb API. This product uses the TMDb API but
+is not endorsed or certified by TMDb.
 
 Generate `LINK_SIGNING_KEY` with a cryptographically secure random generator.
 Do not reuse `BOT_TOKEN`, `API_HASH`, or another service credential as the

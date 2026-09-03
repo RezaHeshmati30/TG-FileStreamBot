@@ -98,14 +98,15 @@ func getWVCLaunchRoute(ctx *gin.Context) {
 
 	videoURL := publicStreamURL(video, videoMessageID, expires)
 	subtitleURL := publicSubtitleURL(subtitle, subtitleMessageID, expires)
-	deepLink := buildWVCDeepLink(videoURL, subtitleURL, video.FileName)
+	metadata := resolveWVCMetadata(ctx, video)
+	deepLink := buildWVCDeepLink(videoURL, subtitleURL, metadata)
 
 	ctx.Header("Cache-Control", "no-store")
 	ctx.Header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'")
 	ctx.Header("Referrer-Policy", "no-referrer")
 	ctx.Header("X-Content-Type-Options", "nosniff")
 	ctx.Header("Content-Type", "text/html; charset=utf-8")
-	if err := wvcPage.Execute(ctx.Writer, wvcPageData{DeepLink: deepLink, Title: video.FileName}); err != nil {
+	if err := wvcPage.Execute(ctx.Writer, wvcPageData{DeepLink: deepLink, Title: metadata.Title}); err != nil {
 		log.Error("Failed to render WVC launch page", zap.Error(err))
 	}
 }
@@ -132,12 +133,24 @@ func publicStreamURL(file *types.File, messageID int, expires int64) string {
 	return fmt.Sprintf("%s/stream/%d?%s", strings.TrimRight(config.ValueOf.Host, "/"), messageID, query.Encode())
 }
 
-func buildWVCDeepLink(videoURL, subtitleURL, title string) string {
-	query := url.Values{
-		"url":       {videoURL},
-		"subtitle":  {subtitleURL},
-		"title":     {title},
-		"autostart": {"true"},
-	}
+func buildWVCDeepLink(videoURL, subtitleURL string, metadata wvcMediaMetadata) string {
+	query := buildWVCQuery(videoURL, metadata)
+	query.Set("subtitle", subtitleURL)
 	return "wvc-x-callback://open?" + query.Encode()
+}
+
+func buildWVCQuery(videoURL string, metadata wvcMediaMetadata) url.Values {
+	query := url.Values{
+		"url":        {videoURL},
+		"title":      {metadata.Title},
+		"autostart":  {"true"},
+		"secure_uri": {"true"},
+	}
+	if metadata.Poster != "" {
+		query.Set("poster", metadata.Poster)
+	}
+	if metadata.MIMEType != "" {
+		query.Set("mime_type", metadata.MIMEType)
+	}
+	return query
 }

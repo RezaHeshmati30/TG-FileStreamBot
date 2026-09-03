@@ -34,7 +34,9 @@ var externalPlayers = map[string]playerDefinition{
 		Name:       "Web Video Caster",
 		Icon:       "📺",
 		ButtonText: "Open in Web Video Caster",
-		DeepLink:   buildWVCVideoDeepLink,
+		DeepLink: func(videoURL, title string) string {
+			return buildWVCVideoDeepLink(videoURL, wvcMediaMetadata{Title: title})
+		},
 	},
 	"vlc": {
 		Name:       "VLC",
@@ -111,7 +113,13 @@ func getPlayerLaunchRoute(ctx *gin.Context) {
 		return
 	}
 	videoURL := publicStreamURL(video, videoMessageID, expires)
-	deepLink := player.DeepLink(videoURL, video.FileName)
+	title := video.FileName
+	deepLink := player.DeepLink(videoURL, title)
+	if playerID == "wvc" {
+		metadata := resolveWVCMetadata(ctx, video)
+		title = metadata.Title
+		deepLink = buildWVCVideoDeepLink(videoURL, metadata)
+	}
 
 	ctx.Header("Cache-Control", "no-store")
 	ctx.Header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'")
@@ -120,18 +128,14 @@ func getPlayerLaunchRoute(ctx *gin.Context) {
 	ctx.Header("Content-Type", "text/html; charset=utf-8")
 	if err := playerPage.Execute(ctx.Writer, playerPageData{
 		AppName: player.Name, Icon: player.Icon, ButtonText: player.ButtonText,
-		DeepLink: deepLink, Title: video.FileName,
+		DeepLink: deepLink, Title: title,
 	}); err != nil {
 		log.Error("Failed to render external player page", zap.String("player", playerID), zap.Error(err))
 	}
 }
 
-func buildWVCVideoDeepLink(videoURL, title string) string {
-	query := url.Values{
-		"url":       {videoURL},
-		"title":     {title},
-		"autostart": {"true"},
-	}
+func buildWVCVideoDeepLink(videoURL string, metadata wvcMediaMetadata) string {
+	query := buildWVCQuery(videoURL, metadata)
 	return "wvc-x-callback://open?" + query.Encode()
 }
 

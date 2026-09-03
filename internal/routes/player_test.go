@@ -7,7 +7,11 @@ import (
 
 func TestBuildWVCVideoDeepLinkHasNoSubtitle(t *testing.T) {
 	video := "https://example.com/stream/10?signature=video&expires=123"
-	deepLink := buildWVCVideoDeepLink(video, "Example Video.mkv")
+	deepLink := buildWVCVideoDeepLink(video, wvcMediaMetadata{
+		Title:    "Example Video (2025)",
+		Poster:   "https://image.tmdb.org/t/p/w500/example.jpg",
+		MIMEType: "video/x-matroska",
+	})
 	parsed, err := url.Parse(deepLink)
 	if err != nil {
 		t.Fatal(err)
@@ -23,6 +27,18 @@ func TestBuildWVCVideoDeepLinkHasNoSubtitle(t *testing.T) {
 	}
 	if got := parsed.Query().Get("autostart"); got != "true" {
 		t.Fatalf("autostart: got %q", got)
+	}
+	if got := parsed.Query().Get("title"); got != "Example Video (2025)" {
+		t.Fatalf("title: got %q", got)
+	}
+	if got := parsed.Query().Get("poster"); got != "https://image.tmdb.org/t/p/w500/example.jpg" {
+		t.Fatalf("poster: got %q", got)
+	}
+	if got := parsed.Query().Get("mime_type"); got != "video/x-matroska" {
+		t.Fatalf("MIME type: got %q", got)
+	}
+	if got := parsed.Query().Get("secure_uri"); got != "true" {
+		t.Fatalf("secure URI: got %q", got)
 	}
 }
 
