@@ -190,6 +190,9 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 			&tg.KeyboardButtonURL{Text: "▶️ Open in VLC", URL: externalPlayerURL("vlc", messageID, expiresAt)},
 		}
 		markup.Rows = append(markup.Rows, tg.KeyboardButtonRow{Buttons: playerButtons})
+		markup.Rows = append(markup.Rows, tg.KeyboardButtonRow{Buttons: []tg.KeyboardButtonClass{
+			&tg.KeyboardButtonCallback{Text: "📱 QR / Other device", Data: handoffCallbackData(messageID, expiresAt)},
+		}})
 
 		var subtitleButtons []tg.KeyboardButtonClass
 		if subtitlesAvailable() {

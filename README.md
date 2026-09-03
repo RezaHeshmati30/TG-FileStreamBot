@@ -38,6 +38,8 @@ acknowledged in [License and attribution](#license-and-attribution).
   supported files.
 - Supports HTTP range requests for seeking and efficient video playback.
 - Provides separate **Download** and **Stream** actions.
+- Creates signed 10-minute QR handoffs for opening a video on another device,
+  with stream, download, Web Video Caster, and VLC actions.
 - Converts authorized external HTTP(S) URLs into encrypted 24-hour secure proxy
   links with browser, WVC, and VLC actions.
 - Displays the filename, file size, creation time, and expiration time in a
@@ -108,7 +110,8 @@ acknowledged in [License and attribution](#license-and-attribution).
 2. The bot copies the file to its private storage channel.
 3. The bot creates a signed link with a seven-day expiration time.
 4. The user can download, stream, open the video in an external player, inspect
-   embedded subtitles, or search for an online subtitle.
+   embedded subtitles, search for an online subtitle, or create a QR handoff
+   for another device.
 5. Public stream requests are validated before Telegram file data is fetched.
 
 Files remain stored in Telegram. Temporary subtitle extraction files are removed
@@ -260,6 +263,7 @@ foundation and adds or substantially expands:
 - secure subtitle archive handling and actual subtitle filename reporting;
 - Web Video Caster integration for video-only and video-plus-subtitle playback;
 - VLC video launch integration;
+- short-lived cross-device QR handoffs with secure playback actions;
 - Docker and Hugging Face bootstrap deployment documentation.
 
 ## Security notes

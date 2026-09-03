@@ -11,6 +11,7 @@ require (
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/quantumsheep/range-parser v1.1.0
 	github.com/spf13/cobra v1.8.0
+	rsc.io/qr v0.2.0
 )
 
 require (
@@ -58,7 +59,6 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.39.1 // indirect
-	rsc.io/qr v0.2.0 // indirect
 )
 
 require (

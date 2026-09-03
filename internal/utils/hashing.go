@@ -82,3 +82,21 @@ func SignPlayerLaunch(player string, videoMessageID int, expires int64) string {
 	_, _ = mac.Write([]byte(payload))
 	return hex.EncodeToString(mac.Sum(nil)[:18])
 }
+
+// SignHandoffAction protects the compact Telegram callback that creates a
+// short-lived cross-device handoff link from an existing file link.
+func SignHandoffAction(messageID int, expires int64) string {
+	payload := fmt.Sprintf("handoff-action:%d:%d", messageID, expires)
+	mac := hmac.New(sha256.New, []byte(config.ValueOf.LinkSigningKey))
+	_, _ = mac.Write([]byte(payload))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil)[:12])
+}
+
+// SignHandoffPage binds a handoff page to one Telegram file and its short
+// expiration time. The full digest is suitable for an HTTPS query parameter.
+func SignHandoffPage(messageID int, expires int64) string {
+	payload := fmt.Sprintf("handoff-page:%d:%d", messageID, expires)
+	mac := hmac.New(sha256.New, []byte(config.ValueOf.LinkSigningKey))
+	_, _ = mac.Write([]byte(payload))
+	return hex.EncodeToString(mac.Sum(nil))
+}
