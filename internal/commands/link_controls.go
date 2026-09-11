@@ -22,7 +22,10 @@ import (
 	"github.com/gotd/td/tg"
 )
 
-const validityPrefix = "v:"
+const (
+	validityPrefix  = "v:"
+	maxLinkValidity = 7 * 24 * time.Hour
+)
 
 func (m *command) LoadValidity(dispatcher dispatcher.Dispatcher) {
 	dispatcher.AddHandler(handlers.NewCallbackQuery(nil, handleValidityCallback))
@@ -93,9 +96,9 @@ func validityMenu(messageID int, expires int64) *tg.ReplyInlineMarkup {
 	return &tg.ReplyInlineMarkup{Rows: []tg.KeyboardButtonRow{
 		{Buttons: []tg.KeyboardButtonClass{&tg.KeyboardButtonCallback{Text: "⛔ Expire now", Data: validityCallback("x", messageID, expires)}}},
 		{Buttons: []tg.KeyboardButtonClass{
-			&tg.KeyboardButtonCallback{Text: "+6 hours", Data: validityCallback("6", messageID, expires)},
-			&tg.KeyboardButtonCallback{Text: "+24 hours", Data: validityCallback("24", messageID, expires)},
-			&tg.KeyboardButtonCallback{Text: "+7 days", Data: validityCallback("7d", messageID, expires)},
+			&tg.KeyboardButtonCallback{Text: "6 hours", Data: validityCallback("6", messageID, expires)},
+			&tg.KeyboardButtonCallback{Text: "24 hours", Data: validityCallback("24", messageID, expires)},
+			&tg.KeyboardButtonCallback{Text: "7 days", Data: validityCallback("7d", messageID, expires)},
 		}},
 		{Buttons: []tg.KeyboardButtonClass{&tg.KeyboardButtonCallback{Text: "⬅️ Back", Data: validityCallback("b", messageID, expires)}}},
 	}}
@@ -129,19 +132,18 @@ func handleValidityCallback(ctx *ext.Context, update *ext.Update) error {
 		answerSubtitleCallback(ctx, update, "Back to link actions.", false)
 		return editReplyMarkup(ctx, update, buildStreamMainMarkup(file, link, icon, messageID, oldExpires))
 	}
-	duration := map[string]time.Duration{"6": 6 * time.Hour, "24": 24 * time.Hour, "7d": 7 * 24 * time.Hour}[action]
-	if action != "x" && duration == 0 {
-		return dispatcher.EndGroups
-	}
-	baseExpires := oldExpires
-	if baseExpires < time.Now().Unix() {
-		baseExpires = time.Now().Unix()
-	}
-	newExpires, state := baseExpires+int64(duration/time.Second), int64(0)
+	now := time.Now()
+	newExpires, state := int64(0), int64(0)
 	if action == "x" {
-		newExpires = time.Now().Add(-time.Second).Unix()
+		newExpires = now.Add(-time.Second).Unix()
 		state = -oldExpires
 	} else {
+		var ok bool
+		newExpires, ok = replacementLinkExpiry(now, action)
+		if !ok {
+			answerSubtitleCallback(ctx, update, "This validity option is invalid.", true)
+			return dispatcher.EndGroups
+		}
 		state = newExpires
 	}
 	if err := persistLinkState(ctx, messageID, state, update.EffectiveUser().ID); err != nil {
@@ -159,6 +161,18 @@ func handleValidityCallback(ctx *ext.Context, update *ext.Update) error {
 	}
 	answerSubtitleCallback(ctx, update, message, false)
 	return dispatcher.EndGroups
+}
+
+func replacementLinkExpiry(now time.Time, action string) (int64, bool) {
+	duration := map[string]time.Duration{
+		"6":  6 * time.Hour,
+		"24": 24 * time.Hour,
+		"7d": 7 * 24 * time.Hour,
+	}[action]
+	if duration <= 0 || duration > maxLinkValidity {
+		return 0, false
+	}
+	return now.Add(duration).Unix(), true
 }
 
 func persistLinkState(ctx *ext.Context, messageID int, state int64, actorID int64) error {
@@ -182,7 +196,7 @@ func refreshLinkMessage(ctx *ext.Context, update *ext.Update, file *filetypes.Fi
 	link := signedStreamLink(file, messageID, expires)
 	icon, ready, label := fileLinkPresentation(file.FileName, file.MimeType)
 	text := buildStreamMessageText(file, link, icon, ready, label, expires)
-	if _, hasPoster := update.EffectiveMessage.Media.(*tg.MessageMediaPhoto); hasPoster {
+	if callbackMessageHasPoster(ctx, update) {
 		text = append(mediaHeading(mediametadata.Resolve(ctx, file)), text...)
 	}
 	markup := buildStreamMainMarkup(file, link, icon, messageID, expires)
@@ -197,6 +211,29 @@ func refreshLinkMessage(ctx *ext.Context, update *ext.Update, file *filetypes.Fi
 	peer := ctx.PeerStorage.GetInputPeerById(update.CallbackQuery.UserID)
 	_, err := ctx.Raw.MessagesEditMessage(ctx, &tg.MessagesEditMessageRequest{Peer: peer, ID: update.CallbackQuery.MsgID, Message: message, Entities: entities, ReplyMarkup: markup})
 	return err
+}
+
+func callbackMessageHasPoster(ctx *ext.Context, update *ext.Update) bool {
+	if update == nil || update.CallbackQuery == nil {
+		return false
+	}
+	result, err := ctx.Raw.MessagesGetMessages(ctx, []tg.InputMessageClass{
+		&tg.InputMessageID{ID: update.CallbackQuery.MsgID},
+	})
+	if err != nil {
+		utils.Logger.Sugar().Warnw("Could not inspect link message media", "message_id", update.CallbackQuery.MsgID, "error", err)
+		return false
+	}
+	messages, err := messagesFromResult(result)
+	if err != nil || len(messages) != 1 {
+		return false
+	}
+	message, ok := messages[0].(*tg.Message)
+	if !ok {
+		return false
+	}
+	_, hasPoster := message.Media.(*tg.MessageMediaPhoto)
+	return hasPoster
 }
 
 func editReplyMarkup(ctx *ext.Context, update *ext.Update, markup tg.ReplyMarkupClass) error {
