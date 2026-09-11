@@ -10,6 +10,7 @@ import (
 	_ "time/tzdata"
 
 	"EverythingSuckz/fsb/config"
+	"EverythingSuckz/fsb/internal/mediametadata"
 	"EverythingSuckz/fsb/internal/utils"
 
 	"github.com/celestix/gotgproto/dispatcher"
@@ -20,6 +21,8 @@ import (
 	"github.com/gotd/td/telegram/message/styling"
 	"github.com/gotd/td/tg"
 )
+
+const metadataLookupBudget = 1200 * time.Millisecond
 
 func (m *command) LoadStream(dispatcher dispatcher.Dispatcher) {
 	log := m.log.Named("start")
@@ -102,6 +105,12 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 		ctx.Reply(u, ext.ReplyTextString("Sorry, this message type is unsupported."), nil)
 		return dispatcher.EndGroups
 	}
+	var metadata *metadataFuture
+	if sourceFile, sourceErr := utils.FileFromMedia(u.EffectiveMessage.Media); sourceErr == nil {
+		if icon, _, _ := fileLinkPresentation(sourceFile.FileName, sourceFile.MimeType); icon == "🎬" {
+			metadata = startMetadataLookup(ctx, sourceFile)
+		}
+	}
 	update, err := utils.ForwardMessages(ctx, chatId, config.ValueOf.LogChannelID, u.EffectiveMessage.ID)
 	if err != nil {
 		utils.Logger.Sugar().Error(err)
@@ -148,7 +157,7 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 	)
 	link := fmt.Sprintf("%s/stream/%d?signature=%s&expires=%d", config.ValueOf.Host, messageID, signature, expiresAt)
 	fileIcon, readyText, linkLabel := fileLinkPresentation(file.FileName, file.MimeType)
-	text := []styling.StyledTextOption{
+	baseText := []styling.StyledTextOption{
 		styling.Plain(fileIcon + " " + readyText + "\n\n🔗 "),
 		styling.Bold(linkLabel),
 		styling.Plain(" (Tap to copy)\n"),
@@ -211,13 +220,35 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 			}})
 		}
 	}
+	var posterMetadata mediametadata.Metadata
+	if metadata != nil {
+		posterMetadata = metadata.await()
+	}
+	messageSent := false
+	if fileIcon == "🎬" && posterMetadata.Poster != "" {
+		posterText := append(mediaHeading(posterMetadata), baseText...)
+		if captionFits(posterText) {
+			posterMarkup := tg.ReplyMarkupClass(markup)
+			if strings.Contains(link, "http://localhost") {
+				posterMarkup = nil
+			}
+			if posterErr := sendPosterReply(ctx, u, posterMetadata.Poster, posterText, posterMarkup); posterErr == nil {
+				messageSent = true
+			} else {
+				utils.Logger.Sugar().Warnw("Could not send TMDb poster; using text fallback", "error", posterErr)
+			}
+		}
+	}
+	if messageSent {
+		return dispatcher.EndGroups
+	}
 	if strings.Contains(link, "http://localhost") {
-		_, err = ctx.Reply(u, ext.ReplyTextStyledTextArray(text), &ext.ReplyOpts{
+		_, err = ctx.Reply(u, ext.ReplyTextStyledTextArray(baseText), &ext.ReplyOpts{
 			NoWebpage:        true,
 			ReplyToMessageId: u.EffectiveMessage.ID,
 		})
 	} else {
-		_, err = ctx.Reply(u, ext.ReplyTextStyledTextArray(text), &ext.ReplyOpts{
+		_, err = ctx.Reply(u, ext.ReplyTextStyledTextArray(baseText), &ext.ReplyOpts{
 			Markup:           markup,
 			NoWebpage:        true,
 			ReplyToMessageId: u.EffectiveMessage.ID,

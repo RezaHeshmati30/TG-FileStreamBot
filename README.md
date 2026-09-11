@@ -44,6 +44,8 @@ acknowledged in [License and attribution](#license-and-attribution).
   links with browser, WVC, and VLC actions.
 - Displays the filename, file size, creation time, and expiration time in a
   structured Telegram message.
+- Displays an official title, release year, and poster for unambiguous TMDb
+  matches without making link generation depend on TMDb availability.
 - Uses configurable local-time display through an IANA timezone.
 - Expires generated links after seven days.
 - Shows user-friendly HTML pages for malformed, invalid, expired, or unavailable
@@ -216,6 +218,11 @@ See [`fsb.sample.env`](fsb.sample.env) for a complete example.
 
 WVC metadata enrichment uses the TMDb API. This product uses the TMDb API but
 is not endorsed or certified by TMDb.
+
+For video messages, the bot starts the same cached TMDb lookup in parallel with
+the normal Telegram forwarding step. If no unambiguous result and poster arrive
+within the short lookup budget—or if Telegram cannot fetch the poster—the
+original text-only link message is sent automatically.
 
 Generate `LINK_SIGNING_KEY` with a cryptographically secure random generator.
 Do not reuse `BOT_TOKEN`, `API_HASH`, or another service credential as the
