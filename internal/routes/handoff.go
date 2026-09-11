@@ -12,6 +12,7 @@ import (
 
 	"EverythingSuckz/fsb/config"
 	"EverythingSuckz/fsb/internal/bot"
+	"EverythingSuckz/fsb/internal/linkstate"
 	"EverythingSuckz/fsb/internal/utils"
 
 	"github.com/gin-gonic/gin"
@@ -77,8 +78,9 @@ func (e *allRoutes) LoadHandoff(r *Route) {
 func getHandoffRoute(ctx *gin.Context) {
 	messageID, messageErr := strconv.Atoi(ctx.Param("messageID"))
 	expires, expiresErr := strconv.ParseInt(ctx.Query("expires"), 10, 64)
+	sourceExpires, sourceExpiresErr := strconv.ParseInt(ctx.Query("source_expires"), 10, 64)
 	signature := ctx.Query("signature")
-	if messageErr != nil || expiresErr != nil || messageID <= 0 || expires <= 0 || signature == "" {
+	if messageErr != nil || expiresErr != nil || sourceExpiresErr != nil || messageID <= 0 || expires <= 0 || sourceExpires <= 0 || signature == "" {
 		renderStreamError(ctx, http.StatusBadRequest, "Invalid handoff", "This cross-device handoff is malformed or incomplete.")
 		return
 	}
@@ -86,7 +88,11 @@ func getHandoffRoute(ctx *gin.Context) {
 		renderStreamError(ctx, http.StatusGone, "Handoff expired", "This cross-device handoff has expired. Please create a new QR code in Telegram.")
 		return
 	}
-	if !utils.CheckSignature(signature, utils.SignHandoffPage(messageID, expires)) {
+	if !linkstate.Allows(messageID, sourceExpires) {
+		renderStreamError(ctx, http.StatusGone, "Handoff replaced", "This handoff was expired or replaced by a newer link.")
+		return
+	}
+	if !utils.CheckSignature(signature, utils.SignHandoffPage(messageID, sourceExpires, expires)) {
 		renderStreamError(ctx, http.StatusForbidden, "Invalid handoff", "This cross-device handoff has been modified and cannot be used.")
 		return
 	}
@@ -98,8 +104,8 @@ func getHandoffRoute(ctx *gin.Context) {
 		renderStreamError(ctx, http.StatusNotFound, "File unavailable", "The original file could not be found.")
 		return
 	}
-	streamURL := publicStreamURL(file, messageID, expires)
-	pageURL := canonicalHandoffURL(messageID, expires, signature)
+	streamURL := publicStreamURL(file, messageID, sourceExpires)
+	pageURL := canonicalHandoffURL(messageID, sourceExpires, expires, signature)
 	code, err := qr.Encode(pageURL, qr.M)
 	if err != nil {
 		log.Error("Could not generate handoff QR code", zap.Error(err))
@@ -116,16 +122,16 @@ func getHandoffRoute(ctx *gin.Context) {
 	if err := handoffPage.Execute(ctx.Writer, handoffPageData{
 		Title: file.FileName, QRCode: qrDataURL, StreamURL: streamURL,
 		DownloadURL: streamURL + "&d=true",
-		WVCURL:      playerLaunchURL("wvc", messageID, expires),
-		VLCURL:      playerLaunchURL("vlc", messageID, expires),
+		WVCURL:      playerLaunchURL("wvc", messageID, sourceExpires),
+		VLCURL:      playerLaunchURL("vlc", messageID, sourceExpires),
 		Expires:     time.Unix(expires, 0).In(configuredLocation()).Format("02 Jan 2006, 15:04 MST"),
 	}); err != nil {
 		log.Error("Failed to render handoff page", zap.Error(err))
 	}
 }
 
-func canonicalHandoffURL(messageID int, expires int64, signature string) string {
-	query := url.Values{"expires": {strconv.FormatInt(expires, 10)}, "signature": {signature}}
+func canonicalHandoffURL(messageID int, sourceExpires int64, expires int64, signature string) string {
+	query := url.Values{"source_expires": {strconv.FormatInt(sourceExpires, 10)}, "expires": {strconv.FormatInt(expires, 10)}, "signature": {signature}}
 	return fmt.Sprintf("%s/handoff/%d?%s", strings.TrimRight(config.ValueOf.Host, "/"), messageID, query.Encode())
 }
 

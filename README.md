@@ -40,6 +40,8 @@ acknowledged in [License and attribution](#license-and-attribution).
 - Provides separate **Download** and **Stream** actions.
 - Creates signed 10-minute QR handoffs for opening a video on another device,
   with stream, download, Web Video Caster, and VLC actions.
+- Lets authorized users expire a video link immediately or replace it with a
+  new 6-hour, 24-hour, or 7-day link from its inline validity menu.
 - Converts authorized external HTTP(S) URLs into encrypted 24-hour secure proxy
   links with browser, WVC, and VLC actions.
 - Displays the filename, file size, and expiration time in a structured
@@ -290,6 +292,9 @@ foundation and adds or substantially expands:
   become invalid.
 - Anyone who receives a valid file link can use it until it expires. Share links
   accordingly.
+- Validity changes are persisted in the private access channel. Replacing or
+  expiring a link also invalidates previously copied stream, player, and QR
+  handoff URLs.
 
 ## Limitations
 

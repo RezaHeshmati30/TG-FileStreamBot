@@ -20,13 +20,14 @@ func TestCanonicalHandoffURLCanBeEncodedAsQR(t *testing.T) {
 	})
 
 	expires := int64(123456789)
-	signature := utils.SignHandoffPage(42, expires)
-	result := canonicalHandoffURL(42, expires, signature)
+	sourceExpires := int64(223456789)
+	signature := utils.SignHandoffPage(42, sourceExpires, expires)
+	result := canonicalHandoffURL(42, sourceExpires, expires, signature)
 	parsed, err := url.Parse(result)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if parsed.Path != "/handoff/42" || parsed.Query().Get("signature") != signature {
+	if parsed.Path != "/handoff/42" || parsed.Query().Get("signature") != signature || parsed.Query().Get("source_expires") != "223456789" {
 		t.Fatalf("unexpected canonical handoff URL: %s", result)
 	}
 	code, err := qr.Encode(result, qr.M)

@@ -2,6 +2,7 @@ package routes
 
 import (
 	"EverythingSuckz/fsb/internal/bot"
+	"EverythingSuckz/fsb/internal/linkstate"
 	"EverythingSuckz/fsb/internal/stream"
 	"EverythingSuckz/fsb/internal/types"
 	"EverythingSuckz/fsb/internal/utils"
@@ -57,6 +58,10 @@ func getStreamRoute(ctx *gin.Context) {
 	}
 	if time.Now().Unix() > expiresAt {
 		renderStreamError(ctx, http.StatusGone, "Link expired", "This link has reached the end of its 7-day validity period and is no longer available.")
+		return
+	}
+	if !linkstate.Allows(messageID, expiresAt) {
+		renderStreamError(ctx, http.StatusGone, "Link replaced", "This link was expired or replaced by a newer link.")
 		return
 	}
 

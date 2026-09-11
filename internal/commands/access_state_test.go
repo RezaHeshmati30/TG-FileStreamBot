@@ -15,9 +15,9 @@ func TestAccessStateRemainsBackwardCompatible(t *testing.T) {
 	}
 }
 
-func TestAccessStateStoresUsernames(t *testing.T) {
+func TestAccessStateStoresMetadata(t *testing.T) {
 	users := map[int64]struct{}{123: {}}
-	encoded, err := encodeAccessState(users, map[int64]string{123: "maxmustermann"}, map[int64]string{123: "german"}, 1)
+	encoded, err := encodeAccessState(users, map[int64]string{123: "maxmustermann"}, map[int64]string{123: "german"}, map[int]int64{42: 4102444800}, 1)
 	if err != nil {
 		t.Fatalf("encode access state: %v", err)
 	}
@@ -30,5 +30,8 @@ func TestAccessStateStoresUsernames(t *testing.T) {
 	}
 	if language := subtitleLanguagesFromState(state)[123]; language != "german" {
 		t.Fatalf("expected stored subtitle language, got %q", language)
+	}
+	if expiry := linkExpiriesFromState(state)[42]; expiry != 4102444800 {
+		t.Fatalf("expected stored link expiry, got %d", expiry)
 	}
 }

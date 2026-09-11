@@ -12,6 +12,7 @@ import (
 
 	"EverythingSuckz/fsb/config"
 	"EverythingSuckz/fsb/internal/bot"
+	"EverythingSuckz/fsb/internal/linkstate"
 	"EverythingSuckz/fsb/internal/types"
 	"EverythingSuckz/fsb/internal/utils"
 
@@ -74,6 +75,10 @@ func getWVCLaunchRoute(ctx *gin.Context) {
 	}
 	if time.Now().Unix() > expires {
 		renderStreamError(ctx, http.StatusGone, "WVC link expired", "The video and subtitle links have expired and can no longer be opened.")
+		return
+	}
+	if !linkstate.Allows(videoMessageID, expires) {
+		renderStreamError(ctx, http.StatusGone, "WVC link replaced", "This WVC link was expired or replaced by a newer link.")
 		return
 	}
 	expected := utils.SignWVCLaunch(videoMessageID, subtitleMessageID, expires)

@@ -11,11 +11,11 @@ func TestHandoffSignaturesBindMessageAndExpiry(t *testing.T) {
 	config.ValueOf.LinkSigningKey = "test-signing-key-with-at-least-32-characters"
 	t.Cleanup(func() { config.ValueOf.LinkSigningKey = oldKey })
 
-	pageSignature := SignHandoffPage(10, 123456789)
-	if !CheckSignature(pageSignature, SignHandoffPage(10, 123456789)) {
+	pageSignature := SignHandoffPage(10, 123456700, 123456789)
+	if !CheckSignature(pageSignature, SignHandoffPage(10, 123456700, 123456789)) {
 		t.Fatal("expected identical handoff page data to validate")
 	}
-	if CheckSignature(pageSignature, SignHandoffPage(11, 123456789)) || CheckSignature(pageSignature, SignHandoffPage(10, 123456790)) {
+	if CheckSignature(pageSignature, SignHandoffPage(11, 123456700, 123456789)) || CheckSignature(pageSignature, SignHandoffPage(10, 123456701, 123456789)) || CheckSignature(pageSignature, SignHandoffPage(10, 123456700, 123456790)) {
 		t.Fatal("changing handoff page data must invalidate the signature")
 	}
 	if SignHandoffAction(10, 123456789) == SignHandoffAction(11, 123456789) {

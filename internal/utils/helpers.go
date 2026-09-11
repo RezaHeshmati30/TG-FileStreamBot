@@ -44,13 +44,17 @@ func IsClientDisconnectError(err error) bool {
 // TODO: move these to a separate package if they grow too large
 
 func GetTGMessage(ctx context.Context, client *gotgproto.Client, messageID int) (*tg.Message, error) {
+	return GetTGMessageRaw(ctx, client.API(), client.PeerStorage, messageID)
+}
+
+func GetTGMessageRaw(ctx context.Context, api *tg.Client, peerStorage *storage.PeerStorage, messageID int) (*tg.Message, error) {
 	inputMessageID := tg.InputMessageClass(&tg.InputMessageID{ID: messageID})
-	channel, err := GetLogChannelPeer(ctx, client.API(), client.PeerStorage)
+	channel, err := GetLogChannelPeer(ctx, api, peerStorage)
 	if err != nil {
 		return nil, err
 	}
 	messageRequest := tg.ChannelsGetMessagesRequest{Channel: channel, ID: []tg.InputMessageClass{inputMessageID}}
-	res, err := client.API().ChannelsGetMessages(ctx, &messageRequest)
+	res, err := api.ChannelsGetMessages(ctx, &messageRequest)
 	if err != nil {
 		return nil, err
 	}
@@ -145,6 +149,14 @@ func FileFromMessage(ctx context.Context, client *gotgproto.Client, messageID in
 
 func GetLogChannelPeer(ctx context.Context, api *tg.Client, peerStorage *storage.PeerStorage) (*tg.InputChannel, error) {
 	return GetChannelPeer(ctx, api, peerStorage, config.ValueOf.LogChannelID)
+}
+
+func FileFromMessageRaw(ctx context.Context, api *tg.Client, peerStorage *storage.PeerStorage, messageID int) (*types.File, error) {
+	message, err := GetTGMessageRaw(ctx, api, peerStorage, messageID)
+	if err != nil {
+		return nil, err
+	}
+	return FileFromMedia(message.Media)
 }
 
 func GetChannelPeer(ctx context.Context, api *tg.Client, peerStorage *storage.PeerStorage, channelID int64) (*tg.InputChannel, error) {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"EverythingSuckz/fsb/config"
+	"EverythingSuckz/fsb/internal/linkstate"
 	"EverythingSuckz/fsb/internal/utils"
 
 	"github.com/celestix/gotgproto/dispatcher"
@@ -64,12 +65,16 @@ func handleHandoffCallback(ctx *ext.Context, update *ext.Update) error {
 		answerSubtitleCallback(ctx, update, "This file link has expired.", true)
 		return dispatcher.EndGroups
 	}
+	if !linkstate.Allows(messageID, originalExpires) {
+		answerSubtitleCallback(ctx, update, "This file link was expired or replaced.", true)
+		return dispatcher.EndGroups
+	}
 
 	handoffExpires := now.Add(handoffLifetime).Unix()
 	if handoffExpires > originalExpires {
 		handoffExpires = originalExpires
 	}
-	handoffURL := buildHandoffURL(messageID, handoffExpires)
+	handoffURL := buildHandoffURL(messageID, originalExpires, handoffExpires)
 	expiresDisplay := time.Unix(handoffExpires, 0).In(displayLocation()).Format("15:04 MST")
 	markup := &tg.ReplyInlineMarkup{Rows: []tg.KeyboardButtonRow{{Buttons: []tg.KeyboardButtonClass{
 		&tg.KeyboardButtonURL{Text: "📱 Open QR handoff", URL: handoffURL},
@@ -79,10 +84,11 @@ func handleHandoffCallback(ctx *ext.Context, update *ext.Update) error {
 	return dispatcher.EndGroups
 }
 
-func buildHandoffURL(messageID int, expires int64) string {
+func buildHandoffURL(messageID int, sourceExpires int64, expires int64) string {
 	query := url.Values{
-		"expires":   {strconv.FormatInt(expires, 10)},
-		"signature": {utils.SignHandoffPage(messageID, expires)},
+		"source_expires": {strconv.FormatInt(sourceExpires, 10)},
+		"expires":        {strconv.FormatInt(expires, 10)},
+		"signature":      {utils.SignHandoffPage(messageID, sourceExpires, expires)},
 	}
 	return fmt.Sprintf("%s/handoff/%d?%s", strings.TrimRight(config.ValueOf.Host, "/"), messageID, query.Encode())
 }

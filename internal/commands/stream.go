@@ -18,7 +18,6 @@ import (
 	"github.com/celestix/gotgproto/ext"
 	"github.com/celestix/gotgproto/storage"
 	"github.com/celestix/gotgproto/types"
-	"github.com/gotd/td/telegram/message/styling"
 	"github.com/gotd/td/tg"
 )
 
@@ -145,8 +144,6 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 	}
 	createdAt := time.Now().UTC()
 	expiresAt := createdAt.Add(7 * 24 * time.Hour).Unix()
-	location := displayLocation()
-	expiresAtDisplay := time.Unix(expiresAt, 0).In(location)
 	signature := utils.SignFile(
 		file.FileName,
 		file.FileSize,
@@ -156,66 +153,8 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 	)
 	link := fmt.Sprintf("%s/stream/%d?signature=%s&expires=%d", config.ValueOf.Host, messageID, signature, expiresAt)
 	fileIcon, readyText, linkLabel := fileLinkPresentation(file.FileName, file.MimeType)
-	baseText := []styling.StyledTextOption{
-		styling.Plain(fileIcon + " " + readyText + "\n\n🔗 "),
-		styling.Bold(linkLabel),
-		styling.Plain(" (Tap to copy)\n"),
-		styling.Code(link),
-		styling.Plain("\n\n" + fileIcon + " "),
-		styling.Bold("File Name"),
-		styling.Plain("\n"),
-		styling.Plain(file.FileName),
-		styling.Plain("\n\n📦 "),
-		styling.Bold("File Size"),
-		styling.Plain(fmt.Sprintf("\n%s", formatFileSize(file.FileSize))),
-		styling.Plain("\n\n⏳ "),
-		styling.Bold("Expires"),
-		styling.Plain(fmt.Sprintf("\n%s (7 days)", expiresAtDisplay.Format("02 Jan 2006, 15:04 MST"))),
-	}
-	row := tg.KeyboardButtonRow{
-		Buttons: []tg.KeyboardButtonClass{
-			&tg.KeyboardButtonURL{
-				Text: "Download",
-				URL:  link + "&d=true",
-			},
-		},
-	}
-	if fileIcon == "🎬" || strings.Contains(file.MimeType, "audio") || strings.Contains(file.MimeType, "pdf") {
-		row.Buttons = append(row.Buttons, &tg.KeyboardButtonURL{
-			Text: "Stream",
-			URL:  link,
-		})
-	}
-	markup := &tg.ReplyInlineMarkup{
-		Rows: []tg.KeyboardButtonRow{row},
-	}
-	if fileIcon == "🎬" {
-		playerButtons := []tg.KeyboardButtonClass{
-			&tg.KeyboardButtonURL{Text: "📺 WVC", URL: externalPlayerURL("wvc", messageID, expiresAt)},
-			&tg.KeyboardButtonURL{Text: "▶️ VLC", URL: externalPlayerURL("vlc", messageID, expiresAt)},
-		}
-		markup.Rows = append(markup.Rows, tg.KeyboardButtonRow{Buttons: playerButtons})
-		markup.Rows = append(markup.Rows, tg.KeyboardButtonRow{Buttons: []tg.KeyboardButtonClass{
-			&tg.KeyboardButtonCallback{Text: "📱 QR / Other device", Data: handoffCallbackData(messageID, expiresAt)},
-		}})
-
-		var subtitleButtons []tg.KeyboardButtonClass
-		if subtitlesAvailable() {
-			subtitleButtons = append(subtitleButtons, &tg.KeyboardButtonCallback{Text: "💬 Embedded", Data: subtitleCallbackData("p", messageID, expiresAt, -1)})
-		}
-		if onlineSubtitlesAvailable() {
-			subtitleButtons = append(subtitleButtons, &tg.KeyboardButtonCallback{Text: "🔎 Subtitle", Data: subtitleCallbackData("o", messageID, expiresAt, -1)})
-		}
-		if len(subtitleButtons) > 0 {
-			markup.Rows = append(markup.Rows, tg.KeyboardButtonRow{Buttons: subtitleButtons})
-		}
-		media := parseMediaFileName(file.FileName)
-		if seriesProgressAvailable() && media.Type == "series" {
-			markup.Rows = append(markup.Rows, tg.KeyboardButtonRow{Buttons: []tg.KeyboardButtonClass{
-				&tg.KeyboardButtonCallback{Text: "✅ Mark episode watched", Data: seriesProgressStartCallback(messageID, expiresAt)},
-			}})
-		}
-	}
+	baseText := buildStreamMessageText(file, link, fileIcon, readyText, linkLabel, expiresAt)
+	markup := buildStreamMainMarkup(file, link, fileIcon, messageID, expiresAt)
 	var posterMetadata mediametadata.Metadata
 	if metadata != nil {
 		posterMetadata = metadata.await()

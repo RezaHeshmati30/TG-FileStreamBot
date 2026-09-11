@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"EverythingSuckz/fsb/internal/bot"
+	"EverythingSuckz/fsb/internal/linkstate"
 	"EverythingSuckz/fsb/internal/utils"
 
 	"github.com/gin-gonic/gin"
@@ -97,6 +98,10 @@ func getPlayerLaunchRoute(ctx *gin.Context) {
 	}
 	if time.Now().Unix() > expires {
 		renderStreamError(ctx, http.StatusGone, "Player link expired", "The video link has expired and can no longer be opened.")
+		return
+	}
+	if !linkstate.Allows(videoMessageID, expires) {
+		renderStreamError(ctx, http.StatusGone, "Player link replaced", "This player link was expired or replaced by a newer link.")
 		return
 	}
 	expected := utils.SignPlayerLaunch(playerID, videoMessageID, expires)

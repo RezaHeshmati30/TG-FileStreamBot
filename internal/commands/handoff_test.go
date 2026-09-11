@@ -36,12 +36,12 @@ func TestBuildHandoffURL(t *testing.T) {
 		config.ValueOf.LinkSigningKey = oldKey
 	})
 
-	result := buildHandoffURL(42, 123456789)
+	result := buildHandoffURL(42, 223456789, 123456789)
 	parsed, err := url.Parse(result)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if parsed.Path != "/handoff/42" || parsed.Query().Get("expires") != "123456789" || parsed.Query().Get("signature") == "" {
+	if parsed.Path != "/handoff/42" || parsed.Query().Get("expires") != "123456789" || parsed.Query().Get("source_expires") != "223456789" || parsed.Query().Get("signature") == "" {
 		t.Fatalf("unexpected handoff URL: %s", result)
 	}
 }

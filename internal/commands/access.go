@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"EverythingSuckz/fsb/config"
+	"EverythingSuckz/fsb/internal/linkstate"
 	"EverythingSuckz/fsb/internal/utils"
 
 	"github.com/celestix/gotgproto"
@@ -30,6 +31,7 @@ type accessState struct {
 	Users             []int64           `json:"users"`
 	Usernames         map[string]string `json:"usernames,omitempty"`
 	SubtitleLanguages map[string]string `json:"subtitle_languages,omitempty"`
+	LinkExpiries      map[string]int64  `json:"link_expiries,omitempty"`
 	ActorID           int64             `json:"actor_id"`
 	UpdatedAt         int64             `json:"updated_at"`
 }
@@ -83,6 +85,7 @@ func InitializeAccess(ctx context.Context, client *gotgproto.Client, log *zap.Lo
 		users = usersFromState(state)
 		usernames = usernamesFromState(state)
 		languages = subtitleLanguagesFromState(state)
+		linkstate.Replace(linkExpiriesFromState(state))
 		users[config.ValueOf.OwnerID] = struct{}{}
 	}
 
@@ -149,7 +152,7 @@ func messagesFromResult(result tg.MessagesMessagesClass) ([]tg.MessageClass, err
 }
 
 func createPinnedAccessState(ctx context.Context, api *tg.Client, peer *tg.InputPeerChannel, users map[int64]struct{}, usernames map[int64]string) (int, error) {
-	text, err := encodeAccessState(users, usernames, nil, config.ValueOf.OwnerID)
+	text, err := encodeAccessState(users, usernames, nil, nil, config.ValueOf.OwnerID)
 	if err != nil {
 		return 0, err
 	}
@@ -238,7 +241,18 @@ func subtitleLanguagesFromState(state accessState) map[int64]string {
 	return languages
 }
 
-func encodeAccessState(users map[int64]struct{}, usernames map[int64]string, languages map[int64]string, actorID int64) (string, error) {
+func linkExpiriesFromState(state accessState) map[int]int64 {
+	links := make(map[int]int64, len(state.LinkExpiries))
+	for rawID, expiry := range state.LinkExpiries {
+		messageID, err := strconv.Atoi(rawID)
+		if err == nil && messageID > 0 && expiry != 0 {
+			links[messageID] = expiry
+		}
+	}
+	return links
+}
+
+func encodeAccessState(users map[int64]struct{}, usernames map[int64]string, languages map[int64]string, links map[int]int64, actorID int64) (string, error) {
 	userIDs := sortedUserIDs(users)
 	storedUsernames := make(map[string]string)
 	for _, userID := range userIDs {
@@ -252,7 +266,18 @@ func encodeAccessState(users map[int64]struct{}, usernames map[int64]string, lan
 			storedLanguages[strconv.FormatInt(userID, 10)] = language
 		}
 	}
-	data, err := json.Marshal(accessState{Users: userIDs, Usernames: storedUsernames, SubtitleLanguages: storedLanguages, ActorID: actorID, UpdatedAt: time.Now().Unix()})
+	storedLinks := make(map[string]int64)
+	now := time.Now().Unix()
+	for messageID, expiry := range links {
+		pruneAt := expiry
+		if pruneAt < 0 {
+			pruneAt = -pruneAt
+		}
+		if pruneAt >= now {
+			storedLinks[strconv.Itoa(messageID)] = expiry
+		}
+	}
+	data, err := json.Marshal(accessState{Users: userIDs, Usernames: storedUsernames, SubtitleLanguages: storedLanguages, LinkExpiries: storedLinks, ActorID: actorID, UpdatedAt: now})
 	if err != nil {
 		return "", err
 	}
@@ -296,7 +321,7 @@ func rememberAuthorizedUsername(ctx *ext.Context, user *tg.User) {
 	} else {
 		updatedUsernames[user.ID] = user.Username
 	}
-	if err := persistAccessState(ctx, botAccess.messageID, botAccess.users, updatedUsernames, botAccess.languages, user.ID); err != nil {
+	if err := persistAccessState(ctx, botAccess.messageID, botAccess.users, updatedUsernames, botAccess.languages, linkstate.Snapshot(), user.ID); err != nil {
 		utils.Logger.Warn("Could not update stored username", zap.Int64("user_id", user.ID), zap.Error(err))
 		return
 	}
@@ -406,7 +431,7 @@ func applyAccessChange(ctx *ext.Context, u *ext.Update, actor *tg.User, userID i
 	if !allow {
 		delete(updatedLanguages, userID)
 	}
-	if err := persistAccessState(ctx, botAccess.messageID, updated, updatedUsernames, updatedLanguages, actor.ID); err != nil {
+	if err := persistAccessState(ctx, botAccess.messageID, updated, updatedUsernames, updatedLanguages, linkstate.Snapshot(), actor.ID); err != nil {
 		utils.Logger.Error("Could not persist access change", zap.Error(err))
 		ctx.Reply(u, ext.ReplyTextString("The access change could not be saved. Nothing was changed."), nil)
 		return dispatcher.EndGroups
@@ -423,8 +448,8 @@ func applyAccessChange(ctx *ext.Context, u *ext.Update, actor *tg.User, userID i
 	return dispatcher.EndGroups
 }
 
-func persistAccessState(ctx *ext.Context, messageID int, users map[int64]struct{}, usernames map[int64]string, languages map[int64]string, actorID int64) error {
-	text, err := encodeAccessState(users, usernames, languages, actorID)
+func persistAccessState(ctx *ext.Context, messageID int, users map[int64]struct{}, usernames map[int64]string, languages map[int64]string, links map[int]int64, actorID int64) error {
+	text, err := encodeAccessState(users, usernames, languages, links, actorID)
 	if err != nil {
 		return err
 	}
@@ -454,7 +479,7 @@ func savePreferredSubtitleLanguage(ctx *ext.Context, userID int64, language stri
 		updatedLanguages[id] = value
 	}
 	updatedLanguages[userID] = language
-	if err := persistAccessState(ctx, botAccess.messageID, botAccess.users, botAccess.usernames, updatedLanguages, userID); err != nil {
+	if err := persistAccessState(ctx, botAccess.messageID, botAccess.users, botAccess.usernames, updatedLanguages, linkstate.Snapshot(), userID); err != nil {
 		return err
 	}
 	botAccess.languages = updatedLanguages

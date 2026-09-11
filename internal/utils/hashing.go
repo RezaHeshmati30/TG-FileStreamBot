@@ -94,8 +94,8 @@ func SignHandoffAction(messageID int, expires int64) string {
 
 // SignHandoffPage binds a handoff page to one Telegram file and its short
 // expiration time. The full digest is suitable for an HTTPS query parameter.
-func SignHandoffPage(messageID int, expires int64) string {
-	payload := fmt.Sprintf("handoff-page:%d:%d", messageID, expires)
+func SignHandoffPage(messageID int, sourceExpires int64, expires int64) string {
+	payload := fmt.Sprintf("handoff-page:%d:%d:%d", messageID, sourceExpires, expires)
 	mac := hmac.New(sha256.New, []byte(config.ValueOf.LinkSigningKey))
 	_, _ = mac.Write([]byte(payload))
 	return hex.EncodeToString(mac.Sum(nil))
