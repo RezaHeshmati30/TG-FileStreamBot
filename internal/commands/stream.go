@@ -146,7 +146,6 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 	createdAt := time.Now().UTC()
 	expiresAt := createdAt.Add(7 * 24 * time.Hour).Unix()
 	location := displayLocation()
-	createdAtDisplay := createdAt.In(location)
 	expiresAtDisplay := time.Unix(expiresAt, 0).In(location)
 	signature := utils.SignFile(
 		file.FileName,
@@ -169,9 +168,6 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 		styling.Plain("\n\n📦 "),
 		styling.Bold("File Size"),
 		styling.Plain(fmt.Sprintf("\n%s", formatFileSize(file.FileSize))),
-		styling.Plain("\n\n🕒 "),
-		styling.Bold("Created"),
-		styling.Plain(fmt.Sprintf("\n%s", createdAtDisplay.Format("02 Jan 2006, 15:04 MST"))),
 		styling.Plain("\n\n⏳ "),
 		styling.Bold("Expires"),
 		styling.Plain(fmt.Sprintf("\n%s (7 days)", expiresAtDisplay.Format("02 Jan 2006, 15:04 MST"))),
@@ -195,8 +191,8 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 	}
 	if fileIcon == "🎬" {
 		playerButtons := []tg.KeyboardButtonClass{
-			&tg.KeyboardButtonURL{Text: "📺 Open in WVC", URL: externalPlayerURL("wvc", messageID, expiresAt)},
-			&tg.KeyboardButtonURL{Text: "▶️ Open in VLC", URL: externalPlayerURL("vlc", messageID, expiresAt)},
+			&tg.KeyboardButtonURL{Text: "📺 WVC", URL: externalPlayerURL("wvc", messageID, expiresAt)},
+			&tg.KeyboardButtonURL{Text: "▶️ VLC", URL: externalPlayerURL("vlc", messageID, expiresAt)},
 		}
 		markup.Rows = append(markup.Rows, tg.KeyboardButtonRow{Buttons: playerButtons})
 		markup.Rows = append(markup.Rows, tg.KeyboardButtonRow{Buttons: []tg.KeyboardButtonClass{
@@ -208,7 +204,7 @@ func sendLink(ctx *ext.Context, u *ext.Update) error {
 			subtitleButtons = append(subtitleButtons, &tg.KeyboardButtonCallback{Text: "💬 Embedded", Data: subtitleCallbackData("p", messageID, expiresAt, -1)})
 		}
 		if onlineSubtitlesAvailable() {
-			subtitleButtons = append(subtitleButtons, &tg.KeyboardButtonCallback{Text: "🔎 Search Online", Data: subtitleCallbackData("o", messageID, expiresAt, -1)})
+			subtitleButtons = append(subtitleButtons, &tg.KeyboardButtonCallback{Text: "🔎 Subtitle", Data: subtitleCallbackData("o", messageID, expiresAt, -1)})
 		}
 		if len(subtitleButtons) > 0 {
 			markup.Rows = append(markup.Rows, tg.KeyboardButtonRow{Buttons: subtitleButtons})

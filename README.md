@@ -42,8 +42,8 @@ acknowledged in [License and attribution](#license-and-attribution).
   with stream, download, Web Video Caster, and VLC actions.
 - Converts authorized external HTTP(S) URLs into encrypted 24-hour secure proxy
   links with browser, WVC, and VLC actions.
-- Displays the filename, file size, creation time, and expiration time in a
-  structured Telegram message.
+- Displays the filename, file size, and expiration time in a structured
+  Telegram message.
 - Displays an official title, release year, and poster for unambiguous TMDb
   matches without making link generation depend on TMDb availability.
 - Uses configurable local-time display through an IANA timezone.
