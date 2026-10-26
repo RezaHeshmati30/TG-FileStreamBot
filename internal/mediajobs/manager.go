@@ -49,19 +49,26 @@ type Result struct {
 }
 
 type Job struct {
-	ID        string    `json:"id"`
-	Status    Status    `json:"status"`
-	Message   string    `json:"message,omitempty"`
-	Choices   []Choice  `json:"choices,omitempty"`
-	Result    *Result   `json:"result,omitempty"`
-	Error     string    `json:"error,omitempty"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
-	ExpiresAt time.Time `json:"expiresAt"`
-	SourceBot string    `json:"-"`
-	Payload   string    `json:"-"`
-	peer      tg.InputPeerClass
-	peerID    int64
+	ID              string    `json:"id"`
+	Status          Status    `json:"status"`
+	Message         string    `json:"message,omitempty"`
+	Choices         []Choice  `json:"choices,omitempty"`
+	Result          *Result   `json:"result,omitempty"`
+	Error           string    `json:"error,omitempty"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
+	ExpiresAt       time.Time `json:"expiresAt"`
+	DetectedSeason  string    `json:"detectedSeason,omitempty"`
+	DetectedEpisode string    `json:"detectedEpisode,omitempty"`
+	SubtitleStatus  string    `json:"subtitleStatus,omitempty"`
+	SubtitleError   string    `json:"subtitleError,omitempty"`
+	SubtitleWVCURL  string    `json:"subtitleWvcUrl,omitempty"`
+	SourceBot       string    `json:"-"`
+	Payload         string    `json:"-"`
+	peer            tg.InputPeerClass
+	peerID          int64
+	videoMessageID  int
+	videoExpires    int64
 }
 
 type Manager struct {
@@ -310,6 +317,7 @@ func (m *Manager) complete(job *Job, message *tg.Message) {
 		return
 	}
 	expires := time.Now().UTC().Add(7 * 24 * time.Hour)
+	season, episode := detectSeasonEpisode(file.FileName)
 	signature := utils.SignFile(file.FileName, file.FileSize, file.MimeType, file.ID, expires.Unix())
 	streamURL := fmt.Sprintf("%s/stream/%d?signature=%s&expires=%d", strings.TrimRight(config.ValueOf.Host, "/"), messageID, signature, expires.Unix())
 	playerURL := func(player string) string {
@@ -320,6 +328,8 @@ func (m *Manager) complete(job *Job, message *tg.Message) {
 	if m.active == job && job.Status != StatusCancelled {
 		job.Status, job.Message, job.Choices, job.UpdatedAt = StatusCompleted, "Video link ready", nil, time.Now().UTC()
 		job.Result = &Result{StreamURL: streamURL, DownloadURL: streamURL + "&d=true", VLCURL: playerURL("vlc"), WebVideoCasterURL: playerURL("wvc"), ExpiresAt: expires.Format(time.RFC3339)}
+		job.videoMessageID, job.videoExpires = messageID, expires.Unix()
+		job.DetectedSeason, job.DetectedEpisode = season, episode
 		m.active = nil
 	}
 	m.mu.Unlock()

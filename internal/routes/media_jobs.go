@@ -28,11 +28,32 @@ type chooseMediaJobRequest struct {
 	ChoiceID string `json:"choiceId"`
 }
 
+type prepareSubtitleRequest struct {
+	SubtitleID string `json:"subtitleId"`
+	Season     string `json:"season"`
+	Episode    string `json:"episode"`
+}
+
 func (e *allRoutes) LoadMediaJobs(r *Route) {
 	r.Engine.POST("/api/v1/media-link-jobs", verifyCineRateBridge(), createMediaJob)
 	r.Engine.GET("/api/v1/media-link-jobs/:id", verifyCineRateBridge(), getMediaJob)
 	r.Engine.POST("/api/v1/media-link-jobs/:id/choices", verifyCineRateBridge(), chooseMediaJob)
+	r.Engine.POST("/api/v1/media-link-jobs/:id/subtitles", verifyCineRateBridge(), prepareMediaJobSubtitle)
 	r.Engine.DELETE("/api/v1/media-link-jobs/:id", verifyCineRateBridge(), cancelMediaJob)
+}
+
+func prepareMediaJobSubtitle(ctx *gin.Context) {
+	var request prepareSubtitleRequest
+	if err := ctx.ShouldBindJSON(&request); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid subtitle request"})
+		return
+	}
+	job, err := mediajobs.Default.PrepareSubtitle(ctx.Param("id"), request.SubtitleID, request.Season, request.Episode)
+	if err != nil {
+		ctx.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusAccepted, job)
 }
 
 func verifyCineRateBridge() gin.HandlerFunc {
