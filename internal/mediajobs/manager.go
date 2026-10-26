@@ -179,15 +179,41 @@ func (m *Manager) Choose(id, choiceID string) (*Job, error) {
 		return nil, errors.New("choice is no longer available")
 	}
 	peer := job.peer
+	selectedChoice := *choice
+	selectedChoice.data = append([]byte(nil), choice.data...)
 	job.Status, job.Message, job.Choices, job.UpdatedAt = StatusWaiting, "Waiting for Telegram", nil, time.Now().UTC()
+	choiceStartedAt := job.UpdatedAt
 	result := cloneJob(job)
 	m.mu.Unlock()
-	_, err := m.client.API().MessagesGetBotCallbackAnswer(context.Background(), &tg.MessagesGetBotCallbackAnswerRequest{Peer: peer, MsgID: choice.msgID, Data: choice.data})
-	if err != nil {
-		m.fail(job, err)
-		return nil, err
-	}
+	go m.invokeChoice(job, peer, selectedChoice, choiceStartedAt)
 	return result, nil
+}
+
+func (m *Manager) invokeChoice(job *Job, peer tg.InputPeerClass, choice Choice, choiceStartedAt time.Time) {
+	_, err := m.client.API().MessagesGetBotCallbackAnswer(context.Background(), &tg.MessagesGetBotCallbackAnswerRequest{Peer: peer, MsgID: choice.msgID, Data: choice.data})
+	if err == nil {
+		return
+	}
+
+	m.mu.RLock()
+	progressed := m.active != job || job.Status == StatusInteractive || job.Status == StatusCompleted || job.Status == StatusCancelled || job.UpdatedAt.After(choiceStartedAt)
+	m.mu.RUnlock()
+	if progressed || isNonFatalCallbackError(err) {
+		if m.log != nil {
+			m.log.Warn("Telegram callback acknowledgement failed; continuing to wait for updates", zap.String("jobId", job.ID), zap.Error(err))
+		}
+		return
+	}
+
+	m.fail(job, err)
+}
+
+func isNonFatalCallbackError(err error) bool {
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return true
+	}
+	message := strings.ToUpper(err.Error())
+	return strings.Contains(message, "TIMEOUT") || strings.Contains(message, "TIMED OUT") || strings.Contains(message, "DEADLINE EXCEEDED")
 }
 
 func (m *Manager) start(job *Job) {

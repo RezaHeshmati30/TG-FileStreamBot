@@ -106,7 +106,7 @@ func chooseMediaJob(ctx *gin.Context) {
 		ctx.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, job)
+	ctx.JSON(http.StatusAccepted, job)
 }
 
 func cancelMediaJob(ctx *gin.Context) {
