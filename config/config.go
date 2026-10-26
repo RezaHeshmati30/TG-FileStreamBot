@@ -52,6 +52,8 @@ type config struct {
 	SubsourceAPIKey      string       `envconfig:"SUBSOURCE_API_KEY"`
 	SeriesProgressAPIURL string       `envconfig:"SERIES_PROGRESS_API_URL"`
 	SeriesProgressAPIKey string       `envconfig:"SERIES_PROGRESS_API_KEY"`
+	CineRateBridgeSecret string       `envconfig:"CINERATE_BRIDGE_SECRET"`
+	CineRateSourceBots   string       `envconfig:"CINERATE_SOURCE_BOTS"`
 	UseSessionFile       bool         `envconfig:"USE_SESSION_FILE" default:"true"`
 	UserSession          string       `envconfig:"USER_SESSION"`
 	UsePublicIP          bool         `envconfig:"USE_PUBLIC_IP" default:"false"`
